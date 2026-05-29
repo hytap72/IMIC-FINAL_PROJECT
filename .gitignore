@@ -1,0 +1,38 @@
+# --- 1. Build artifacts & core generated files ---
+/build/
+sdkconfig
+sdkconfig.old
+CMakeCache.txt
+CMakeFiles/
+CMakeLists.txt.user*
+config.cmake
+.ccache/
+*.bin
+*.elf
+*.map
+
+# --- 2. IDF Component Manager ---
+managed_components/
+# dependencies.lock # Nếu muốn commit lock file, hãy comment dòng này lại
+
+# --- 3. IDE & local development environment files ---
+.vscode/
+.clangd/
+.ccls-cache/
+.idea/
+.settings/
+.espressif/
+
+# --- 4. Python & logs ---
+__pycache__/
+*.pyc
+*.pyo
+*.log
+pytest_embedded_log/
+build_summary_*.xml
+app_info_*.txt
+size_info_*.txt
+
+# --- 5. OS generated files ---
+.DS_Store
+Thumbs.db
