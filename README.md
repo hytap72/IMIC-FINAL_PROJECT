@@ -2,6 +2,8 @@
 
 > Đề tài: **Robot "thám hiểm"** — hệ thống nhúng trên ESP32 thu thập dữ liệu môi trường, điều khiển di chuyển từ xa, truyền dữ liệu qua MQTT/AWS IoT Core.
 
+Robot được điều khiển qua **BLE** từ ứng dụng Android: cấu hình WiFi không cần chạm vào phần cứng, gửi lệnh di chuyển trực tiếp từ điện thoại. Dữ liệu cảm biến (nhiệt độ, độ ẩm, ánh sáng, pin) được thu thập liên tục và truyền lên cloud để theo dõi qua dashboard.
+
 ---
 
 ## Nhóm thực hiện
