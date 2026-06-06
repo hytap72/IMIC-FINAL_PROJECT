@@ -1,4 +1,74 @@
-# IMIC Final Project — ESP32 Embedded System
+# IMIC Final Project — Robot Thám Hiểm
+
+> Đề tài: **Robot "thám hiểm"** — hệ thống nhúng trên ESP32 thu thập dữ liệu môi trường, điều khiển di chuyển từ xa, truyền dữ liệu qua MQTT/AWS IoT Core.
+
+---
+
+## Nhóm thực hiện
+
+| Thành viên | Đảm nhiệm | Khối lượng chính |
+|---|---|---|
+| **Chính** | Di chuyển, Camera | Driver motor, BLE/WiFi nhận lệnh điều khiển |
+| **Phát** | Nhiệt độ, Độ ẩm | HTU21D, Wrapper I2C (timeout + retry) |
+| **Nghĩa** | Ánh sáng | BH1750, tổng hợp dữ liệu sensor |
+| **Duy** | Giám sát pin | MAX17043, cơ chế error/retry tập trung |
+
+---
+
+## Định hướng dự án
+
+**Input:**
+- Hardware: cảm biến đo mức pin, góc, hướng (la bàn), gia tốc, nhiệt độ, độ ẩm, áp suất, ánh sáng, gió, vật cản, khoảng cách (siêu âm, IR, laser...), camera
+- Software: user app / domain, server
+
+**Output:**
+- Motor, LED, buzzer, voice
+- MQTT / AWS IoT Core, data stream
+
+**App:**
+- User/admin interface: control, monitor, log, security
+
+---
+
+## Kiến trúc tổng thể
+
+```
+[Sensors] → [ESP32] → [WiFi/MQTT] → [AWS IoT Core] → [Dashboard Grafana + Lambda]
+                ↑
+         [Remote Command]  ←  [Server / Mobile App]
+```
+
+---
+
+## Pending
+
+### Chung
+- [ ] Định nghĩa giao thức lệnh giữa server và ESP32 (BLE / MQTT topic)
+- [ ] Thiết kế kiến trúc task FreeRTOS (skeleton task) và phân chia priority
+- [ ] Gắc naming convention + áp dụng SOLID cho toàn bộ codebase
+- [ ] Cấu hình CI (build check tự động khi push)
+- [ ] Review PR trước khi merge vào `main`
+
+### Chính — Di chuyển & Camera
+- [ ] Tích hợp `driver_motor` vào luồng nhận lệnh BLE/WiFi
+- [ ] Thêm PWM để điều chỉnh tốc độ động cơ
+- [ ] Module camera (stream / chụp ảnh gửi server)
+
+### Phát — Nhiệt độ & Độ ẩm
+- [ ] Wrapper I2C dùng chung với timeout + retry
+- [ ] Đóng gói dữ liệu HTU21D → publish MQTT
+
+### Nghĩa — Ánh sáng
+- [ ] Hoàn thiện BH1750 driver
+- [ ] Tổng hợp tất cả dữ liệu sensor vào một struct chung
+- [ ] Gửi payload JSON qua MQTT/TLS lên AWS IoT Core
+
+### Duy — Giám sát pin
+- [ ] Hoàn thiện MAX17043 đọc SOC + voltage
+- [ ] Cảnh báo pin thấp (log / LED / gửi alert)
+- [ ] Kiểm thử dashboard Grafana + Lambda
+
+---
 
 Hệ thống nhúng chạy trên ESP32 sử dụng ESP-IDF framework, tích hợp nhiều cảm biến và module điều khiển động cơ qua giao tiếp I2C.
 
