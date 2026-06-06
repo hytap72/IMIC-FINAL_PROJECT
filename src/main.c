@@ -1,22 +1,27 @@
-#include "max17043.h"
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_log.h"
+#include "htu21d.h"
 
-static const char *TAG = "APP_MAIN";
+static const char *TAG = "MAIN";
 
-void app_main(void){
-    i2c_init();
-    vTaskDelay(pdMS_TO_TICKS(500));
-    while(1){
-        float voltage = read_battery_voltage();
-        float soc = read_soc();
-        if (voltage >= 0.0 && soc >= 0.0) {
-            ESP_LOGI(TAG, "Voltage: %.2f V | Capacity: %.2f %%", voltage, soc);
-            if (soc <= 20.0) {
-                ESP_LOGW(TAG, "Warning: Low battery level!");
-            }
-        } 
-        else{
-            ESP_LOGE(TAG, "Communication error: Cannot read data from MAX17043!");
-        }
-        vTaskDelay(pdMS_TO_TICKS(2000));
+// Task đọc cảm biến
+static void sensor_reading_task(void *pvParameters)
+{
+    while (1)
+    {
+        float temp = htu21d_get_temperature();
+        float hum = htu21d_get_humidity();
+        ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%", temp, hum);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
+
+void app_main(void)
+{
+    i2c_master_init();
+
+    xTaskCreate(sensor_reading_task, "sensor_task", 4096, NULL, 5, NULL);
+
 }
