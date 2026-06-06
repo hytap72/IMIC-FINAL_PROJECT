@@ -1,6 +1,6 @@
 # --- 1. Build artifacts & core generated files ---
 /build/
-.pios
+.pio/
 sdkconfig
 sdkconfig.old
 CMakeCache.txt
