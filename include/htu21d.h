@@ -2,14 +2,12 @@
 #define HTU21D_H
 
 #include "esp_err.h"
+#include "driver/i2c_master.h"
 
-// Khởi tạo I2C master
-esp_err_t i2c_master_init(void);
+// Khởi tạo I2C bus (new driver), trả về bus_handle để các sensor khác dùng chung
+esp_err_t i2c_master_init(i2c_master_bus_handle_t *out_bus);
 
-// Đọc nhiệt độ (trả về độ C)
 float htu21d_get_temperature(void);
-
-// Đọc độ ẩm (trả về % RH)
 float htu21d_get_humidity(void);
 
 #endif

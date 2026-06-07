@@ -4,8 +4,10 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
+#include "driver/i2c_master.h"
 
 #include "htu21d.h"
+#include "max17043.h"
 #include "driver_motor.h"
 #include "ble_manager.h"
 
@@ -23,17 +25,19 @@ static void sensor_task(void *pvParameters)
 
 void app_main(void)
 {
-    /* NVS và event loop cần cho WiFi + BLE */
     nvs_flash_init();
     esp_event_loop_create_default();
 
-    /* Khởi tạo I2C và các driver */
-    i2c_master_init();
+    /* Tạo I2C bus dùng chung cho tất cả sensor */
+    i2c_master_bus_handle_t i2c_bus;
+    i2c_master_init(&i2c_bus);
+
+    /* Thêm các sensor vào bus */
+    max17043_init(i2c_bus);
+
     driver_motor_init();
 
-    /* Khởi tạo BLE — advertise tên "IMIC_Robot" */
     ble_manager_init("IMIC_Robot");
 
-    /* Task đọc cảm biến định kỳ */
     xTaskCreate(sensor_task, "sensor_task", 4096, NULL, 5, NULL);
 }

@@ -15,7 +15,7 @@
 #define REG_VCELL 0x02
 #define REG_SOC 0x04
 
-void i2c_init(void);
+void max17043_init(i2c_master_bus_handle_t bus);
 
 float read_battery_voltage(void);
 
