@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- WiFi Section -->
+    <TextView
+        android:text="Cấu hình WiFi"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <EditText
+        android:id="@+id/etSsid"
+        android:hint="SSID (tên WiFi)"
+        android:inputType="text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"/>
+
+    <EditText
+        android:id="@+id/etPassword"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnConnectWifi"
+        android:text="Kết nối WiFi"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvWifiStatus"
+        android:text="WiFi: Chờ..."
+        android:textSize="13sp"
+        android:textColor="#888888"
+        android:layout_marginBottom="24dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <!-- Motor Control Section -->
+    <TextView
+        android:text="Điều khiển Motor"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <!-- Tiến -->
+    <Button
+        android:id="@+id/btnForward"
+        android:text="▲  Tiến"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Trái / Dừng / Phải -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <Button
+            android:id="@+id/btnLeft"
+            android:text="◄"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"/>
+
+        <Button
+            android:id="@+id/btnStop"
+            android:text="■"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:backgroundTint="#E53935"
+            android:layout_marginEnd="4dp"/>
+
+        <Button
+            android:id="@+id/btnRight"
+            android:text="►"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"/>
+
+    </LinearLayout>
+
+    <!-- Lùi -->
+    <Button
+        android:id="@+id/btnBackward"
+        android:text="▼  Lùi"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Run -->
+    <Button
+        android:id="@+id/btnRun"
+        android:text="▶  Run"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:backgroundTint="#43A047"/>
+
+</LinearLayout>
