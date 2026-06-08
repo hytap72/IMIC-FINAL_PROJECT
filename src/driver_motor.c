@@ -5,10 +5,10 @@
 static const char *TAG = "DRIVER_MOTOR";
 
 /* Định nghĩa chân GPIO cho motor driver (L298N hoặc tương tự) */
-#define MOTOR_IN1  GPIO_NUM_25
-#define MOTOR_IN2  GPIO_NUM_26
-#define MOTOR_IN3  GPIO_NUM_27
-#define MOTOR_IN4  GPIO_NUM_14
+#define MOTOR_IN1  GPIO_NUM_4
+#define MOTOR_IN2  GPIO_NUM_16
+#define MOTOR_IN3  GPIO_NUM_17
+#define MOTOR_IN4  GPIO_NUM_5
 
 esp_err_t driver_motor_init(void)
 {
@@ -42,18 +42,18 @@ void driver_motor_handle_cmd(motor_cmd_t cmd)
     switch (cmd) {
         case MOTOR_CMD_FORWARD:
             ESP_LOGI(TAG, "Forward");
-            gpio_set_level(MOTOR_IN1, 1);
-            gpio_set_level(MOTOR_IN2, 0);
-            gpio_set_level(MOTOR_IN3, 1);
-            gpio_set_level(MOTOR_IN4, 0);
-            break;
-
-        case MOTOR_CMD_BACKWARD:
-            ESP_LOGI(TAG, "Backward");
             gpio_set_level(MOTOR_IN1, 0);
             gpio_set_level(MOTOR_IN2, 1);
             gpio_set_level(MOTOR_IN3, 0);
             gpio_set_level(MOTOR_IN4, 1);
+            break;
+
+        case MOTOR_CMD_BACKWARD:
+            ESP_LOGI(TAG, "Backward");
+            gpio_set_level(MOTOR_IN1, 1);
+            gpio_set_level(MOTOR_IN2, 0);
+            gpio_set_level(MOTOR_IN3, 1);
+            gpio_set_level(MOTOR_IN4, 0);
             break;
 
         case MOTOR_CMD_LEFT:
@@ -74,10 +74,10 @@ void driver_motor_handle_cmd(motor_cmd_t cmd)
 
         case MOTOR_CMD_RUN:
             ESP_LOGI(TAG, "Run");
-            gpio_set_level(MOTOR_IN1, 1);
-            gpio_set_level(MOTOR_IN2, 0);
-            gpio_set_level(MOTOR_IN3, 1);
-            gpio_set_level(MOTOR_IN4, 0);
+            gpio_set_level(MOTOR_IN1, 0);
+            gpio_set_level(MOTOR_IN2, 1);
+            gpio_set_level(MOTOR_IN3, 0);
+            gpio_set_level(MOTOR_IN4, 1);
             break;
 
         case MOTOR_CMD_STOP:
