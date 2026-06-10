@@ -1,5 +1,6 @@
 #include "driver/i2c_master.h"
-#include "esp_err.h"
+#include "esp_err.h" 
+#include "i2c_bus.h"
 
 /* I2C Address */
 #define BH1750_I2C_ADDR_LOW     0x23    // ADDR pin = GND
@@ -21,14 +22,13 @@ typedef enum {
 } bh1750_mode_t;
 
 typedef struct {
-    i2c_master_dev_handle_t i2c_handle;
-    bh1750_mode_t           mode;
-} bh1750_handle_t;
+    i2c_dev_t       base;
+    bh1750_mode_t   mode;
+    float lux_value;
+} bh1750_t;
 
-esp_err_t bh1750_init(i2c_master_bus_handle_t bus_handle,
-                      uint8_t dev_addr,
-                      bh1750_handle_t *out_handle);
+esp_err_t bh1750_init(i2c_master_bus_handle_t bus_handle, bh1750_t *sensor);
 
-esp_err_t bh1750_set_mode(bh1750_handle_t *sensor, bh1750_mode_t mode);
+esp_err_t bh1750_set_mode(bh1750_t *sensor, bh1750_mode_t mode);
 
-esp_err_t bh1750_read_lux(bh1750_handle_t *sensor, float *lux);
+float bh1750_read_lux(bh1750_t *sensor);
