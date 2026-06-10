@@ -37,3 +37,6 @@ size_info_*.txt
 # --- 5. OS generated files ---
 .DS_Store
 Thumbs.db
+
+# --- 6. AWS IoT certs/keys (không commit) ---
+include/aws_certs.h

@@ -1,0 +1,37 @@
+#ifndef AWS_CERTS_H
+#define AWS_CERTS_H
+
+/*
+ * Mẫu file chứng chỉ AWS IoT Core (mutual TLS).
+ *
+ * Cách dùng:
+ *   1. Copy file này thành "include/aws_certs.h" (đã nằm trong .gitignore).
+ *   2. Tải 3 file PEM từ AWS IoT Console (Security → Certificates) khi tạo Thing:
+ *        - AmazonRootCA1.pem            -> AWS_ROOT_CA
+ *        - xxxx-certificate.pem.crt     -> AWS_DEVICE_CERT
+ *        - xxxx-private.pem.key         -> AWS_PRIVATE_KEY  (⚠️ bí mật)
+ *   3. Dán nguyên văn nội dung PEM (giữ nguyên \n cuối mỗi dòng) vào các chuỗi bên dưới.
+ *
+ * ⚠️ KHÔNG commit "include/aws_certs.h" sau khi điền key thật.
+ */
+
+/* Amazon Root CA 1 — dùng chung mọi project/region */
+static const char AWS_ROOT_CA[] =
+"-----BEGIN CERTIFICATE-----\n"
+"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
+"...\n"
+"-----END CERTIFICATE-----\n";
+
+/* Device certificate (xxxx-certificate.pem.crt) */
+static const char AWS_DEVICE_CERT[] =
+"-----BEGIN CERTIFICATE-----\n"
+"...\n"
+"-----END CERTIFICATE-----\n";
+
+/* Device private key (xxxx-private.pem.key) — bí mật */
+static const char AWS_PRIVATE_KEY[] =
+"-----BEGIN RSA PRIVATE KEY-----\n"
+"...\n"
+"-----END RSA PRIVATE KEY-----\n";
+
+#endif

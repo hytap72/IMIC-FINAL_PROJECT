@@ -67,6 +67,7 @@ static uint16_t s_gatts_if_motor = ESP_GATT_IF_NONE;
 
 static char s_ssid[64]     = {0};
 static char s_password[64] = {0};
+static ble_wifi_connected_cb_t s_wifi_connected_cb = NULL;
 
 /* ─── Advertise config ──────────────────────────────────── */
 static esp_ble_adv_params_t s_adv_params = {
@@ -197,6 +198,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi connected, IP: " IPSTR, IP2STR(&event->ip_info.ip));
         ble_manager_notify_wifi_status(WIFI_STATUS_CONNECTED);
+
+        if (s_wifi_connected_cb) {
+            s_wifi_connected_cb();
+        }
     }
 }
 
@@ -395,6 +400,11 @@ esp_err_t ble_manager_init(const char *device_name)
 
     ESP_LOGI(TAG, "BLE initialized, advertising as \"%s\"", device_name);
     return ESP_OK;
+}
+
+void ble_manager_set_wifi_connected_cb(ble_wifi_connected_cb_t cb)
+{
+    s_wifi_connected_cb = cb;
 }
 
 void ble_manager_notify_wifi_status(ble_wifi_status_t status)

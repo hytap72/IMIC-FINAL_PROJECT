@@ -37,8 +37,17 @@ esp_err_t driver_motor_init(void)
     return ESP_OK;
 }
 
+static motor_cmd_t s_last_cmd = MOTOR_CMD_STOP;
+
+motor_cmd_t driver_motor_get_state(void)
+{
+    return s_last_cmd;
+}
+
 void driver_motor_handle_cmd(motor_cmd_t cmd)
 {
+    s_last_cmd = cmd;
+
     switch (cmd) {
         case MOTOR_CMD_FORWARD:
             ESP_LOGI(TAG, "Forward");

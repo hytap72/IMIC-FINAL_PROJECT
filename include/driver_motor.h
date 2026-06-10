@@ -19,4 +19,7 @@ esp_err_t driver_motor_init(void);
 /* Xử lý lệnh nhận từ server */
 void driver_motor_handle_cmd(motor_cmd_t cmd);
 
+/* Lấy trạng thái/lệnh motor gần nhất (dùng cho telemetry) */
+motor_cmd_t driver_motor_get_state(void);
+
 #endif

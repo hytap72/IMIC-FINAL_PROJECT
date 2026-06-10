@@ -24,8 +24,14 @@ typedef enum {
     WIFI_STATUS_FAILED      = 0x03,
 } ble_wifi_status_t;
 
+/* Callback gọi khi WiFi STA kết nối thành công và nhận được IP */
+typedef void (*ble_wifi_connected_cb_t)(void);
+
 /* Khởi tạo BLE stack và bắt đầu advertise */
 esp_err_t ble_manager_init(const char *device_name);
+
+/* Đăng ký callback gọi khi WiFi kết nối thành công (có IP) */
+void ble_manager_set_wifi_connected_cb(ble_wifi_connected_cb_t cb);
 
 /* Gửi notify trạng thái WiFi về app đang kết nối */
 void ble_manager_notify_wifi_status(ble_wifi_status_t status);
