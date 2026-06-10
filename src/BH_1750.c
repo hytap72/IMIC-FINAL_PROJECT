@@ -3,54 +3,48 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_check.h"
+
 static const char *TAG = "BH1750";
-#define I2C_TIMEOUT_MS 200
 
-/* Gửi 1 byte lệnh xuống sensor */
-static esp_err_t bh1750_send_cmd(bh1750_handle_t *sensor, uint8_t cmd)
-{
-    return i2c_master_transmit(sensor->i2c_handle, &cmd, 1,
-                               I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-}
 
-esp_err_t bh1750_init(i2c_master_bus_handle_t bus_handle,
-                      uint8_t dev_addr,
-                      bh1750_handle_t *out_handle)
+esp_err_t bh1750_init(i2c_master_bus_handle_t bus_handle, bh1750_t *sensor)
 {
-    /* Thêm device vào bus */
+    sensor->base.address = BH1750_I2C_ADDR_LOW;
+    sensor->lux_value = 0.0f;
+    sensor->mode = BH1750_MODE_CONT_H;
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = dev_addr,
-        .scl_speed_hz = 400000,
+        .device_address = sensor->base.address,
+        .scl_speed_hz = I2C_MASTER_FREQ,
     };
     ESP_RETURN_ON_ERROR(
-        i2c_master_bus_add_device(bus_handle, &dev_cfg, &out_handle->i2c_handle),
+        i2c_master_bus_add_device(bus_handle, &dev_cfg, &sensor->base.dev_handle),
         TAG, "Failed to add BH1750 to I2C bus");
 
     /* Power ON */
     ESP_RETURN_ON_ERROR(
-        bh1750_send_cmd(out_handle, BH1750_CMD_POWER_ON),
+        i2c_byte_send_to_sensor(sensor->base.dev_handle, BH1750_CMD_POWER_ON),
         TAG, "Power ON failed");
     vTaskDelay(pdMS_TO_TICKS(10));
 
     /* Reset data register */
     ESP_RETURN_ON_ERROR(
-        bh1750_send_cmd(out_handle, BH1750_CMD_RESET),
+        i2c_byte_send_to_sensor(sensor->base.dev_handle, BH1750_CMD_RESET),
         TAG, "Reset failed");
 
     /* Mặc định: Continuous High Resolution */
     ESP_RETURN_ON_ERROR(
-        bh1750_set_mode(out_handle, BH1750_MODE_CONT_H),
+        bh1750_set_mode(sensor, sensor->mode),
         TAG, "Set mode failed");
 
-    ESP_LOGI(TAG, "BH1750 initialized at addr=0x%02X", dev_addr);
+    ESP_LOGI(TAG, "BH1750 initialized at addr=0x%02X", sensor->base.address);
     return ESP_OK;
 }
 
-esp_err_t bh1750_set_mode(bh1750_handle_t *sensor, bh1750_mode_t mode)
+esp_err_t bh1750_set_mode(bh1750_t *sensor,bh1750_mode_t mode)
 {
     ESP_RETURN_ON_ERROR(
-        bh1750_send_cmd(sensor, (uint8_t)mode),
+        i2c_byte_send_to_sensor(sensor->base.dev_handle, (uint8_t)mode),
         TAG, "Set mode failed");
     sensor->mode = mode;
 
@@ -69,14 +63,13 @@ esp_err_t bh1750_set_mode(bh1750_handle_t *sensor, bh1750_mode_t mode)
     return ESP_OK;
 }
 
-esp_err_t bh1750_read_lux(bh1750_handle_t *sensor, float *lux)
+float bh1750_read_lux(bh1750_t *sensor)
 {
     uint8_t raw[2] = {0};
 
-    ESP_RETURN_ON_ERROR(
-        i2c_master_receive(sensor->i2c_handle, raw, sizeof(raw),
-                           I2C_TIMEOUT_MS / portTICK_PERIOD_MS),
-        TAG, "Read failed");
+    if(i2c_master_receive(sensor->base.dev_handle, raw, sizeof(raw), pdMS_TO_TICKS(100)) != ESP_OK){
+        return -999.0f;
+    }
 
     /* Công thức: lux = raw_value / 1.2
      * Nếu dùng H2 mode (0.5 lx resolution): lux = raw_value / 2.4 */
@@ -88,7 +81,7 @@ esp_err_t bh1750_read_lux(bh1750_handle_t *sensor, float *lux)
     else{
         divisor = 1.2f;
     }
-    *lux = (float)raw_val / divisor;
+    sensor->lux_value = (float)raw_val / divisor;
 
     return ESP_OK;
 }
