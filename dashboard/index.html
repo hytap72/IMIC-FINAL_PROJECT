@@ -94,65 +94,38 @@
     const TOPIC_DATA = "imic-esp32/data";
     const TOPIC_CMD  = "imic-esp32/cmd";
 
-    /* URL stream camera Pi (qua Cloudflare Tunnel) — đổi khi tunnel restart */
-    const CAMERA_STREAM_URL = "https://swimmable-abstract-dreamboat.ngrok-free.dev/stream.mjpg";
+    /* Proxy serverless (Vercel) lấy snapshot.jpg từ Pi qua ngrok, kèm header
+     * ngrok-skip-browser-warning -> tránh trang cảnh báo của ngrok free và
+     * tránh CORS, hoạt động trên mọi trình duyệt kể cả Safari/iOS */
+    const CAMERA_SNAPSHOT_URL = "/api/camera";
     /* ============================================================= */
 
-    /* ─── MJPEG stream qua fetch (vì <img> không gửi được header
-     * ngrok-skip-browser-warning, bị chặn bởi trang cảnh báo của ngrok free) ─── */
-    function startMjpegStream(url, canvas) {
+    /* ─── Poll ảnh JPEG liên tục, vẽ lên canvas (thay cho MJPEG stream) ─── */
+    function startCameraPolling(url, canvas, intervalMs = 300) {
       const ctx = canvas.getContext("2d");
-      const headerEnd = new TextEncoder().encode("\r\n\r\n");
-      const boundary  = new TextEncoder().encode("\r\n--frame");
 
-      function indexOf(buf, pattern, from) {
-        outer:
-        for (let i = from; i <= buf.length - pattern.length; i++) {
-          for (let j = 0; j < pattern.length; j++) {
-            if (buf[i + j] !== pattern[j]) continue outer;
-          }
-          return i;
-        }
-        return -1;
-      }
-
-      async function run() {
-        const res = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" } });
-        const reader = res.body.getReader();
-        let buf = new Uint8Array(0);
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const merged = new Uint8Array(buf.length + value.length);
-          merged.set(buf);
-          merged.set(value, buf.length);
-          buf = merged;
-
-          while (true) {
-            const hEnd = indexOf(buf, headerEnd, 0);
-            if (hEnd === -1) break;
-            const dataStart = hEnd + headerEnd.length;
-            const bEnd = indexOf(buf, boundary, dataStart);
-            if (bEnd === -1) break;
-
-            const jpegBytes = buf.slice(dataStart, bEnd);
-            const bitmap = await createImageBitmap(new Blob([jpegBytes], { type: "image/jpeg" }));
+      async function tick() {
+        try {
+          const res = await fetch(url + "?t=" + Date.now());
+          if (res.ok) {
+            const blob = await res.blob();
+            const bitmap = await createImageBitmap(blob);
             canvas.width = bitmap.width;
             canvas.height = bitmap.height;
             ctx.drawImage(bitmap, 0, 0);
             bitmap.close();
-
-            buf = buf.slice(bEnd + boundary.length);
           }
+        } catch (e) {
+          console.error("Camera snapshot error", e);
+        } finally {
+          setTimeout(tick, intervalMs);
         }
       }
 
-      run().catch((e) => console.error("Camera stream error", e));
+      tick();
     }
 
-    startMjpegStream(CAMERA_STREAM_URL, document.getElementById("cam-stream"));
+    startCameraPolling(CAMERA_SNAPSHOT_URL, document.getElementById("cam-stream"));
 
     const motorNames = {
       0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
