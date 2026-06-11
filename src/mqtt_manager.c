@@ -10,6 +10,18 @@ static esp_mqtt_client_handle_t s_client = NULL;
 static mqtt_data_cb_t s_on_data = NULL;
 static volatile bool s_connected = false;
 
+/* Lưu lại các topic đã subscribe để tự động subscribe lại mỗi khi
+ * (re)connect tới broker — esp_mqtt_client_subscribe() chỉ có tác dụng
+ * khi client đã ở trạng thái connected. */
+#define MQTT_MAX_SUBSCRIPTIONS 4
+typedef struct {
+    char topic[128];
+    int qos;
+} mqtt_subscription_t;
+
+static mqtt_subscription_t s_subscriptions[MQTT_MAX_SUBSCRIPTIONS];
+static int s_subscription_count = 0;
+
 /* Buffer tạm để null-terminate topic/data trước khi đưa vào callback */
 #define MQTT_TOPIC_BUF_LEN  128
 #define MQTT_DATA_BUF_LEN   512
@@ -25,11 +37,28 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Connected to broker");
         s_connected = true;
+        /* Subscribe lại tất cả topic đã đăng ký mỗi khi (re)connect */
+        for (int i = 0; i < s_subscription_count; i++) {
+            int msg_id = esp_mqtt_client_subscribe(s_client, s_subscriptions[i].topic, s_subscriptions[i].qos);
+            ESP_LOGI(TAG, "Subscribing to %s, msg_id=%d", s_subscriptions[i].topic, msg_id);
+        }
         break;
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "Disconnected from broker");
         s_connected = false;
+        break;
+
+    case MQTT_EVENT_SUBSCRIBED:
+        ESP_LOGI(TAG, "Subscribed, msg_id=%d", event->msg_id);
+        break;
+
+    case MQTT_EVENT_UNSUBSCRIBED:
+        ESP_LOGW(TAG, "Unsubscribed, msg_id=%d", event->msg_id);
+        break;
+
+    case MQTT_EVENT_PUBLISHED:
+        ESP_LOGI(TAG, "Published, msg_id=%d", event->msg_id);
         break;
 
     case MQTT_EVENT_DATA: {
@@ -46,6 +75,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         memcpy(data, event->data, data_len);
         data[data_len] = '\0';
 
+        ESP_LOGI(TAG, "Data received, topic=%s, data=%s", topic, data);
         s_on_data(topic, data, data_len);
         break;
     }
@@ -74,6 +104,9 @@ esp_err_t mqtt_manager_start(const mqtt_manager_config_t *config)
         .credentials.client_id = config->client_id,
         .credentials.authentication.certificate = config->client_cert,
         .credentials.authentication.key = config->client_key,
+        /* Mặc định 10s không đủ cho mTLS handshake (RSA) trên ESP32 */
+        .network.timeout_ms = 30000,
+        .network.reconnect_timeout_ms = 10000,
     };
 
     s_client = esp_mqtt_client_init(&mqtt_cfg);
@@ -103,6 +136,20 @@ int mqtt_manager_publish(const char *topic, const char *data, int len, int qos, 
 esp_err_t mqtt_manager_subscribe(const char *topic, int qos)
 {
     if (!s_client) return ESP_ERR_INVALID_STATE;
+
+    /* Lưu lại để tự động subscribe lại khi (re)connect */
+    if (s_subscription_count < MQTT_MAX_SUBSCRIPTIONS) {
+        strncpy(s_subscriptions[s_subscription_count].topic, topic, sizeof(s_subscriptions[0].topic) - 1);
+        s_subscriptions[s_subscription_count].topic[sizeof(s_subscriptions[0].topic) - 1] = '\0';
+        s_subscriptions[s_subscription_count].qos = qos;
+        s_subscription_count++;
+    }
+
+    if (!s_connected) {
+        /* Sẽ được subscribe khi MQTT_EVENT_CONNECTED bắn ra */
+        return ESP_OK;
+    }
+
     int msg_id = esp_mqtt_client_subscribe(s_client, topic, qos);
     return msg_id >= 0 ? ESP_OK : ESP_FAIL;
 }

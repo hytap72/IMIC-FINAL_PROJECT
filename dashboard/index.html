@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IMIC Robot - Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #0f1115; color: #eee; margin: 0; padding: 16px;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  .status { font-size: 0.85rem; margin-bottom: 16px; }
+  .status.ok    { color: #4caf50; }
+  .status.err   { color: #f44336; }
+  .status.wait  { color: #ffb300; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px; margin-bottom: 24px; max-width: 600px;
+  }
+  .card {
+    background: #1c1f26; border-radius: 10px; padding: 12px; text-align: center;
+  }
+  .card .label { font-size: 0.75rem; color: #999; }
+  .card .value { font-size: 1.4rem; font-weight: bold; margin-top: 4px; }
+
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(3, 80px);
+    grid-template-rows: repeat(3, 80px);
+    gap: 8px; max-width: 280px; margin: 0 auto;
+  }
+  .pad button {
+    font-size: 1.6rem; border: none; border-radius: 12px;
+    background: #2563eb; color: #fff; cursor: pointer;
+    user-select: none; touch-action: manipulation;
+  }
+  .pad button:active, .pad button.active { background: #1d4ed8; transform: scale(0.96); }
+  .pad button.stop { background: #dc2626; }
+  .pad button.stop:active { background: #b91c1c; }
+  .pad .empty { background: transparent; }
+</style>
+</head>
+<body>
+  <h1>IMIC Robot Dashboard</h1>
+  <div id="status" class="status wait">Đang kết nối tới AWS IoT...</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Nhiệt độ</div><div class="value" id="val-temp">--</div></div>
+    <div class="card"><div class="label">Độ ẩm</div><div class="value" id="val-hum">--</div></div>
+    <div class="card"><div class="label">Pin (V)</div><div class="value" id="val-batt">--</div></div>
+    <div class="card"><div class="label">Pin (%)</div><div class="value" id="val-soc">--</div></div>
+    <div class="card"><div class="label">Trạng thái</div><div class="value" id="val-motor">--</div></div>
+  </div>
+
+  <div class="pad">
+    <div class="empty"></div>
+    <button data-cmd="1">▲</button>
+    <div class="empty"></div>
+
+    <button data-cmd="3">◀</button>
+    <button class="stop" data-cmd="6">■</button>
+    <button data-cmd="4">▶</button>
+
+    <div class="empty"></div>
+    <button data-cmd="2">▼</button>
+    <div class="empty"></div>
+  </div>
+
+  <!-- AWS SDK v2 + aws-iot-device-sdk browser bundle (kết nối MQTT qua WebSocket bằng IAM/Cognito) -->
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1500.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <script>
+    /* ======== CẤU HÌNH — chỉnh theo AWS account của bạn ======== */
+    const AWS_REGION        = "ap-southeast-2";
+    const AWS_IOT_ENDPOINT  = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
+    const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:a3d49410-6887-4f7b-a3f5-a16c27eda9e6";
+
+    const TOPIC_DATA = "imic-esp32/data";
+    const TOPIC_CMD  = "imic-esp32/cmd";
+    /* ============================================================= */
+
+    const motorNames = {
+      0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
+      3: "LEFT", 4: "RIGHT", 5: "RUN", 6: "STOP",
+    };
+
+    const statusEl = document.getElementById("status");
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = "status " + cls;
+    }
+
+    AWS.config.region = AWS_REGION;
+    AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+      IdentityPoolId: COGNITO_IDENTITY_POOL_ID,
+    });
+
+    let client;
+
+    /* ─── Ký SigV4 cho kết nối MQTT-over-WebSocket tới AWS IoT Core ───
+     * Tham khảo: https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html#mqtt-ws */
+    function getSignatureKey(key, dateStamp, regionName, serviceName) {
+      const kDate    = CryptoJS.HmacSHA256(dateStamp, "AWS4" + key);
+      const kRegion  = CryptoJS.HmacSHA256(regionName, kDate);
+      const kService = CryptoJS.HmacSHA256(serviceName, kRegion);
+      return CryptoJS.HmacSHA256("aws4_request", kService);
+    }
+
+    function getSignedWssUrl(host, region, creds) {
+      const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+      const date     = datetime.substring(0, 8);
+      const service  = "iotdevicegateway";
+      const algorithm = "AWS4-HMAC-SHA256";
+
+      const credentialScope = `${date}/${region}/${service}/aws4_request`;
+      const canonicalQuerystring =
+        `X-Amz-Algorithm=${algorithm}` +
+        `&X-Amz-Credential=${encodeURIComponent(creds.accessKeyId + "/" + credentialScope)}` +
+        `&X-Amz-Date=${datetime}` +
+        `&X-Amz-SignedHeaders=host`;
+
+      const canonicalHeaders = `host:${host}\n`;
+      const payloadHash = CryptoJS.SHA256("").toString(CryptoJS.enc.Hex);
+      const canonicalRequest = `GET\n/mqtt\n${canonicalQuerystring}\n${canonicalHeaders}\nhost\n${payloadHash}`;
+
+      const stringToSign =
+        `${algorithm}\n${datetime}\n${credentialScope}\n` +
+        CryptoJS.SHA256(canonicalRequest).toString(CryptoJS.enc.Hex);
+
+      const signingKey = getSignatureKey(creds.secretAccessKey, date, region, service);
+      const signature  = CryptoJS.HmacSHA256(stringToSign, signingKey).toString(CryptoJS.enc.Hex);
+
+      let url = `wss://${host}/mqtt?${canonicalQuerystring}&X-Amz-Signature=${signature}`;
+      if (creds.sessionToken) {
+        url += `&X-Amz-Security-Token=${encodeURIComponent(creds.sessionToken)}`;
+      }
+      return url;
+    }
+
+    AWS.config.credentials.get((err) => {
+      if (err) {
+        setStatus("Lỗi lấy credentials Cognito: " + err.message, "err");
+        return;
+      }
+
+      const creds = {
+        accessKeyId:     AWS.config.credentials.accessKeyId,
+        secretAccessKey: AWS.config.credentials.secretAccessKey,
+        sessionToken:    AWS.config.credentials.sessionToken,
+      };
+
+      const url = getSignedWssUrl(AWS_IOT_ENDPOINT, AWS_REGION, creds);
+
+      client = mqtt.connect(url, {
+        clientId: "dashboard-" + Math.floor(Math.random() * 100000),
+        protocolVersion: 4,
+        reconnectPeriod: 4000,
+      });
+
+      client.on("connect", () => {
+        setStatus("Đã kết nối AWS IoT", "ok");
+        client.subscribe(TOPIC_DATA);
+      });
+
+      client.on("close",       () => setStatus("Mất kết nối, đang thử lại...", "err"));
+      client.on("reconnect",   () => setStatus("Đang kết nối lại...", "wait"));
+      client.on("error", (e)   => setStatus("Lỗi: " + e.message, "err"));
+
+      client.on("message", (topic, payload) => {
+        if (topic !== TOPIC_DATA) return;
+        try {
+          const d = JSON.parse(payload.toString());
+          document.getElementById("val-temp").textContent  = d.temperature  > -900 ? d.temperature.toFixed(1) + " °C" : "--";
+          document.getElementById("val-hum").textContent   = d.humidity     > -900 ? d.humidity.toFixed(1)    + " %"  : "--";
+          document.getElementById("val-batt").textContent  = d.battery_voltage > -900 ? d.battery_voltage.toFixed(2) + " V" : "--";
+          document.getElementById("val-soc").textContent   = d.battery_soc  > -900 ? d.battery_soc.toFixed(1) + " %"  : "--";
+          document.getElementById("val-motor").textContent = motorNames[d.motor_state] ?? d.motor_state;
+        } catch (e) {
+          console.error("Bad payload", e);
+        }
+      });
+    });
+
+    function sendCmd(cmd) {
+      if (!client) return;
+      client.publish(TOPIC_CMD, JSON.stringify({ cmd: cmd }));
+    }
+
+    /* Hold-to-run: nhấn giữ -> gửi lệnh, nhả ra -> gửi STOP (trừ nút STOP) */
+    document.querySelectorAll(".pad button").forEach((btn) => {
+      const cmd = parseInt(btn.dataset.cmd, 10);
+      const isStop = cmd === 6;
+
+      const press = (e) => {
+        e.preventDefault();
+        btn.classList.add("active");
+        sendCmd(cmd);
+      };
+      const release = (e) => {
+        e.preventDefault();
+        btn.classList.remove("active");
+        if (!isStop) sendCmd(6); // STOP khi nhả nút
+      };
+
+      btn.addEventListener("pointerdown", press);
+      btn.addEventListener("pointerup", release);
+      btn.addEventListener("pointerleave", release);
+      btn.addEventListener("pointercancel", release);
+    });
+  </script>
+</body>
+</html>

@@ -6,13 +6,19 @@
  * Chỉnh các giá trị bên dưới cho phù hợp với hệ thống của bạn.
  * ============================================================ */
 
+/* ─── WiFi mặc định (thử kết nối ngay khi khởi động) ────────
+ * Nếu không kết nối được, vẫn có thể cấu hình WiFi khác qua BLE.
+ */
+#define DEFAULT_WIFI_SSID      "Chính"
+#define DEFAULT_WIFI_PASSWORD  "11111111"
+
 /* ─── AWS IoT Core (MQTT qua mTLS) ──────────────────────────
  * Lấy AWS_IOT_ENDPOINT tại AWS IoT Console → Settings → Device data endpoint
  * Cert/key thật điền trong include/aws_certs.h (file này không commit lên git)
  */
-#define AWS_IOT_ENDPOINT      "your-ats-endpoint.iot.ap-southeast-2.amazonaws.com"
+#define AWS_IOT_ENDPOINT      "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com"
 #define AWS_IOT_PORT          8883
-#define AWS_IOT_THING_NAME    "imic-final-esp32"
+#define AWS_IOT_THING_NAME    "imic-esp32"
 
 #define AWS_IOT_TOPIC_DATA    AWS_IOT_THING_NAME "/data"
 #define AWS_IOT_TOPIC_CMD     AWS_IOT_THING_NAME "/cmd"

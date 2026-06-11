@@ -33,6 +33,10 @@ esp_err_t ble_manager_init(const char *device_name);
 /* Đăng ký callback gọi khi WiFi kết nối thành công (có IP) */
 void ble_manager_set_wifi_connected_cb(ble_wifi_connected_cb_t cb);
 
+/* Kết nối WiFi STA với SSID/password cho trước (vd: dùng để thử
+ * kết nối mặc định lúc khởi động, không cần đợi BLE) */
+void ble_manager_connect_wifi(const char *ssid, const char *password);
+
 /* Gửi notify trạng thái WiFi về app đang kết nối */
 void ble_manager_notify_wifi_status(ble_wifi_status_t status);
 

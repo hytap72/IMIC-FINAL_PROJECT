@@ -13,6 +13,7 @@
 #include "esp_bt_main.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_netif.h"
 #include "nvs_flash.h"
 
 static const char *TAG = "BLE_MANAGER";
@@ -198,6 +199,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi connected, IP: " IPSTR, IP2STR(&event->ip_info.ip));
         ble_manager_notify_wifi_status(WIFI_STATUS_CONNECTED);
+
+        /* Một số router cấp DNS server không hoạt động được — ép dùng Google DNS */
+        esp_netif_dns_info_t dns;
+        dns.ip.type = ESP_IPADDR_TYPE_V4;
+        dns.ip.u_addr.ip4.addr = ESP_IP4TOADDR(8, 8, 8, 8);
+        esp_netif_set_dns_info(event->esp_netif, ESP_NETIF_DNS_MAIN, &dns);
+        dns.ip.u_addr.ip4.addr = ESP_IP4TOADDR(8, 8, 4, 4);
+        esp_netif_set_dns_info(event->esp_netif, ESP_NETIF_DNS_BACKUP, &dns);
 
         if (s_wifi_connected_cb) {
             s_wifi_connected_cb();
@@ -405,6 +414,11 @@ esp_err_t ble_manager_init(const char *device_name)
 void ble_manager_set_wifi_connected_cb(ble_wifi_connected_cb_t cb)
 {
     s_wifi_connected_cb = cb;
+}
+
+void ble_manager_connect_wifi(const char *ssid, const char *password)
+{
+    wifi_connect(ssid, password);
 }
 
 void ble_manager_notify_wifi_status(ble_wifi_status_t status)

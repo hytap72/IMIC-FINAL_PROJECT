@@ -3,8 +3,11 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "nvs_flash.h"
 #include "driver/i2c_master.h"
+#include <time.h>
 
 #include "htu21d.h"
 #include "max17043.h"
@@ -17,6 +20,7 @@
 
 static const char *TAG = "MAIN";
 
+#if 0 /* TODO: bật lại khi có cảm biến HTU21D */
 static void sensor_task(void *pvParameters)
 {
     while (1) {
@@ -26,16 +30,19 @@ static void sensor_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
+#endif
 
 /* Gửi telemetry (sensor + battery + trạng thái motor) định kỳ
  * lên AWS IoT (MQTT) và UDP server */
 static void telemetry_task(void *pvParameters)
 {
     while (1) {
-        float temp     = htu21d_get_temperature();
-        float hum      = htu21d_get_humidity();
-        float bat_volt = read_battery_voltage();
-        float bat_soc  = read_soc();
+        /* TODO: dùng htu21d_get_temperature()/get_humidity() khi có cảm biến HTU21D */
+        float temp     = -999.0f;
+        float hum      = -999.0f;
+        /* TODO: dùng read_battery_voltage()/read_soc() khi có cảm biến MAX17043 */
+        float bat_volt = -999.0f;
+        float bat_soc  = -999.0f;
         motor_cmd_t motor_state = driver_motor_get_state();
 
         if (aws_iot_is_connected()) {
@@ -54,9 +61,28 @@ static void telemetry_task(void *pvParameters)
     }
 }
 
+/* Đồng bộ giờ qua SNTP — bắt buộc để TLS xác thực chứng chỉ AWS IoT
+ * (mặc định ESP32 khởi động với đồng hồ ở năm 1970, khiến chứng chỉ
+ * server bị coi là "chưa có hiệu lực") */
+static void sync_time(void)
+{
+    ESP_LOGI(TAG, "Dang dong bo gio qua SNTP...");
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    config.server_from_dhcp = false;
+    esp_netif_sntp_init(&config);
+
+    if (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(20000)) != ESP_OK) {
+        ESP_LOGW(TAG, "Dong bo gio that bai (timeout)");
+    } else {
+        time_t now = time(NULL);
+        ESP_LOGI(TAG, "Da dong bo gio: %s", ctime(&now));
+    }
+}
+
 /* Gọi khi WiFi STA kết nối thành công (có IP) — khởi động các kết nối mạng */
 static void on_wifi_connected(void)
 {
+    sync_time();
     aws_iot_start();
     tcp_client_start();
     udp_client_start();
@@ -66,6 +92,7 @@ static void on_wifi_connected(void)
 void app_main(void)
 {
     nvs_flash_init();
+    esp_netif_init();
     esp_event_loop_create_default();
 
     /* Tạo I2C bus dùng chung cho tất cả sensor */
@@ -73,12 +100,18 @@ void app_main(void)
     i2c_master_init(&i2c_bus);
 
     /* Thêm các sensor vào bus */
-    max17043_init(i2c_bus);
+    /* TODO: bật lại khi có cảm biến MAX17043 */
+    // max17043_init(i2c_bus);
 
     driver_motor_init();
 
     ble_manager_set_wifi_connected_cb(on_wifi_connected);
     ble_manager_init("IMIC_Robot");
 
+    /* Thử kết nối WiFi mặc định ngay khi khởi động (không cần BLE) */
+    ble_manager_connect_wifi(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
+
+#if 0 /* TODO: bật lại khi có cảm biến HTU21D */
     xTaskCreate(sensor_task, "sensor_task", 4096, NULL, 5, NULL);
+#endif
 }
