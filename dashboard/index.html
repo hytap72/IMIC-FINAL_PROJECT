@@ -42,6 +42,12 @@
   .pad button.stop { background: #dc2626; }
   .pad button.stop:active { background: #b91c1c; }
   .pad .empty { background: transparent; }
+
+  .camera {
+    max-width: 600px; margin-bottom: 16px;
+    border-radius: 10px; overflow: hidden; background: #1c1f26;
+  }
+  .camera img { display: block; width: 100%; }
 </style>
 </head>
 <body>
@@ -54,6 +60,10 @@
     <div class="card"><div class="label">Pin (V)</div><div class="value" id="val-batt">--</div></div>
     <div class="card"><div class="label">Pin (%)</div><div class="value" id="val-soc">--</div></div>
     <div class="card"><div class="label">Trạng thái</div><div class="value" id="val-motor">--</div></div>
+  </div>
+
+  <div class="camera">
+    <img id="cam-stream" src="" alt="Camera robot" />
   </div>
 
   <div class="pad">
@@ -83,7 +93,12 @@
 
     const TOPIC_DATA = "imic-esp32/data";
     const TOPIC_CMD  = "imic-esp32/cmd";
+
+    /* URL stream camera Pi (qua Cloudflare Tunnel) — đổi khi tunnel restart */
+    const CAMERA_STREAM_URL = "https://truck-window-copyright-density.trycloudflare.com/stream.mjpg";
     /* ============================================================= */
+
+    document.getElementById("cam-stream").src = CAMERA_STREAM_URL;
 
     const motorNames = {
       0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
