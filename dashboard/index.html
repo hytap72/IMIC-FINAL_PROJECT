@@ -101,7 +101,7 @@
     /* ============================================================= */
 
     /* ─── Poll ảnh JPEG liên tục, vẽ lên canvas (thay cho MJPEG stream) ─── */
-    function startCameraPolling(url, canvas, intervalMs = 300) {
+    function startCameraPolling(url, canvas, intervalMs = 1500) {
       const ctx = canvas.getContext("2d");
 
       async function tick() {
