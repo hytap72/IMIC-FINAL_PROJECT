@@ -1,6 +1,7 @@
 #include "driver_motor.h"
-#include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 static const char *TAG = "DRIVER_MOTOR";
 
@@ -10,38 +11,105 @@ static const char *TAG = "DRIVER_MOTOR";
 #define MOTOR_IN3  GPIO_NUM_17
 #define MOTOR_IN4  GPIO_NUM_5
 
+/* ENA/ENB của L298N nối cố định lên enable -> điều khiển tốc độ
+ * bằng PWM ngay trên chân IN (chân nào HIGH sẽ chạy PWM, chân kia giữ LOW) */
+#define PWM_FREQ_HZ     5000
+#define PWM_RESOLUTION  LEDC_TIMER_8_BIT  /* duty 0-255 */
+#define PWM_MAX_DUTY    255
+
+/* Tăng/giảm tốc dần để tránh giật: mỗi RAMP_INTERVAL_MS thay đổi RAMP_STEP đơn vị duty */
+#define RAMP_INTERVAL_MS  20
+#define RAMP_STEP         8
+
+static const ledc_channel_t s_channels[4] = {
+    LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3
+};
+static const gpio_num_t s_pins[4] = { MOTOR_IN1, MOTOR_IN2, MOTOR_IN3, MOTOR_IN4 };
+
+static int s_current_duty[4] = { 0, 0, 0, 0 };
+static int s_target_duty[4]  = { 0, 0, 0, 0 };
+
+static esp_timer_handle_t s_ramp_timer;
+static motor_cmd_t s_last_cmd = MOTOR_CMD_STOP;
+
+static void ramp_timer_cb(void *arg)
+{
+    for (int i = 0; i < 4; i++) {
+        if (s_current_duty[i] < s_target_duty[i]) {
+            s_current_duty[i] += RAMP_STEP;
+            if (s_current_duty[i] > s_target_duty[i]) s_current_duty[i] = s_target_duty[i];
+        } else if (s_current_duty[i] > s_target_duty[i]) {
+            s_current_duty[i] -= RAMP_STEP;
+            if (s_current_duty[i] < s_target_duty[i]) s_current_duty[i] = s_target_duty[i];
+        } else {
+            continue;
+        }
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, s_channels[i], s_current_duty[i]);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, s_channels[i]);
+    }
+}
+
 esp_err_t driver_motor_init(void)
 {
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << MOTOR_IN1) | (1ULL << MOTOR_IN2) |
-                        (1ULL << MOTOR_IN3) | (1ULL << MOTOR_IN4),
-        .mode         = GPIO_MODE_OUTPUT,
-        .pull_up_en   = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_DISABLE,
+    ledc_timer_config_t timer_conf = {
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = PWM_RESOLUTION,
+        .timer_num       = LEDC_TIMER_0,
+        .freq_hz         = PWM_FREQ_HZ,
+        .clk_cfg         = LEDC_AUTO_CLK,
     };
-
-    esp_err_t ret = gpio_config(&io_conf);
+    esp_err_t ret = ledc_timer_config(&timer_conf);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GPIO init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "LEDC timer config failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    /* Dừng motor khi khởi động */
-    gpio_set_level(MOTOR_IN1, 0);
-    gpio_set_level(MOTOR_IN2, 0);
-    gpio_set_level(MOTOR_IN3, 0);
-    gpio_set_level(MOTOR_IN4, 0);
+    for (int i = 0; i < 4; i++) {
+        ledc_channel_config_t ch_conf = {
+            .gpio_num   = s_pins[i],
+            .speed_mode = LEDC_LOW_SPEED_MODE,
+            .channel    = s_channels[i],
+            .timer_sel  = LEDC_TIMER_0,
+            .duty       = 0,
+            .hpoint     = 0,
+        };
+        ret = ledc_channel_config(&ch_conf);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "LEDC channel %d config failed: %s", i, esp_err_to_name(ret));
+            return ret;
+        }
+    }
 
-    ESP_LOGI(TAG, "Motor driver initialized");
+    const esp_timer_create_args_t timer_args = {
+        .callback = ramp_timer_cb,
+        .name     = "motor_ramp",
+    };
+    ret = esp_timer_create(&timer_args, &s_ramp_timer);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Ramp timer create failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = esp_timer_start_periodic(s_ramp_timer, RAMP_INTERVAL_MS * 1000);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Ramp timer start failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Motor driver initialized (PWM ramp)");
     return ESP_OK;
 }
-
-static motor_cmd_t s_last_cmd = MOTOR_CMD_STOP;
 
 motor_cmd_t driver_motor_get_state(void)
 {
     return s_last_cmd;
+}
+
+static void set_targets(int in1, int in2, int in3, int in4)
+{
+    s_target_duty[0] = in1;
+    s_target_duty[1] = in2;
+    s_target_duty[2] = in3;
+    s_target_duty[3] = in4;
 }
 
 void driver_motor_handle_cmd(motor_cmd_t cmd)
@@ -50,52 +118,30 @@ void driver_motor_handle_cmd(motor_cmd_t cmd)
 
     switch (cmd) {
         case MOTOR_CMD_FORWARD:
+        case MOTOR_CMD_RUN:
             ESP_LOGI(TAG, "Forward");
-            gpio_set_level(MOTOR_IN1, 0);
-            gpio_set_level(MOTOR_IN2, 1);
-            gpio_set_level(MOTOR_IN3, 0);
-            gpio_set_level(MOTOR_IN4, 1);
+            set_targets(0, PWM_MAX_DUTY, 0, PWM_MAX_DUTY);
             break;
 
         case MOTOR_CMD_BACKWARD:
             ESP_LOGI(TAG, "Backward");
-            gpio_set_level(MOTOR_IN1, 1);
-            gpio_set_level(MOTOR_IN2, 0);
-            gpio_set_level(MOTOR_IN3, 1);
-            gpio_set_level(MOTOR_IN4, 0);
+            set_targets(PWM_MAX_DUTY, 0, PWM_MAX_DUTY, 0);
             break;
 
         case MOTOR_CMD_LEFT:
             ESP_LOGI(TAG, "Turn left");
-            gpio_set_level(MOTOR_IN1, 0);
-            gpio_set_level(MOTOR_IN2, 1);
-            gpio_set_level(MOTOR_IN3, 1);
-            gpio_set_level(MOTOR_IN4, 0);
+            set_targets(0, PWM_MAX_DUTY, PWM_MAX_DUTY, 0);
             break;
 
         case MOTOR_CMD_RIGHT:
             ESP_LOGI(TAG, "Turn right");
-            gpio_set_level(MOTOR_IN1, 1);
-            gpio_set_level(MOTOR_IN2, 0);
-            gpio_set_level(MOTOR_IN3, 0);
-            gpio_set_level(MOTOR_IN4, 1);
-            break;
-
-        case MOTOR_CMD_RUN:
-            ESP_LOGI(TAG, "Run");
-            gpio_set_level(MOTOR_IN1, 0);
-            gpio_set_level(MOTOR_IN2, 1);
-            gpio_set_level(MOTOR_IN3, 0);
-            gpio_set_level(MOTOR_IN4, 1);
+            set_targets(PWM_MAX_DUTY, 0, 0, PWM_MAX_DUTY);
             break;
 
         case MOTOR_CMD_STOP:
         default:
             ESP_LOGI(TAG, "Stop");
-            gpio_set_level(MOTOR_IN1, 0);
-            gpio_set_level(MOTOR_IN2, 0);
-            gpio_set_level(MOTOR_IN3, 0);
-            gpio_set_level(MOTOR_IN4, 0);
+            set_targets(0, 0, 0, 0);
             break;
     }
 }
