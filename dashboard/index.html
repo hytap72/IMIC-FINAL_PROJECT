@@ -47,7 +47,7 @@
     max-width: 600px; margin-bottom: 16px;
     border-radius: 10px; overflow: hidden; background: #1c1f26;
   }
-  .camera img { display: block; width: 100%; }
+  .camera canvas { display: block; width: 100%; }
 </style>
 </head>
 <body>
@@ -63,7 +63,7 @@
   </div>
 
   <div class="camera">
-    <img id="cam-stream" src="" alt="Camera robot" />
+    <canvas id="cam-stream"></canvas>
   </div>
 
   <div class="pad">
@@ -98,7 +98,61 @@
     const CAMERA_STREAM_URL = "https://swimmable-abstract-dreamboat.ngrok-free.dev/stream.mjpg";
     /* ============================================================= */
 
-    document.getElementById("cam-stream").src = CAMERA_STREAM_URL;
+    /* ─── MJPEG stream qua fetch (vì <img> không gửi được header
+     * ngrok-skip-browser-warning, bị chặn bởi trang cảnh báo của ngrok free) ─── */
+    function startMjpegStream(url, canvas) {
+      const ctx = canvas.getContext("2d");
+      const headerEnd = new TextEncoder().encode("\r\n\r\n");
+      const boundary  = new TextEncoder().encode("\r\n--frame");
+
+      function indexOf(buf, pattern, from) {
+        outer:
+        for (let i = from; i <= buf.length - pattern.length; i++) {
+          for (let j = 0; j < pattern.length; j++) {
+            if (buf[i + j] !== pattern[j]) continue outer;
+          }
+          return i;
+        }
+        return -1;
+      }
+
+      async function run() {
+        const res = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" } });
+        const reader = res.body.getReader();
+        let buf = new Uint8Array(0);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const merged = new Uint8Array(buf.length + value.length);
+          merged.set(buf);
+          merged.set(value, buf.length);
+          buf = merged;
+
+          while (true) {
+            const hEnd = indexOf(buf, headerEnd, 0);
+            if (hEnd === -1) break;
+            const dataStart = hEnd + headerEnd.length;
+            const bEnd = indexOf(buf, boundary, dataStart);
+            if (bEnd === -1) break;
+
+            const jpegBytes = buf.slice(dataStart, bEnd);
+            const bitmap = await createImageBitmap(new Blob([jpegBytes], { type: "image/jpeg" }));
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+
+            buf = buf.slice(bEnd + boundary.length);
+          }
+        }
+      }
+
+      run().catch((e) => console.error("Camera stream error", e));
+    }
+
+    startMjpegStream(CAMERA_STREAM_URL, document.getElementById("cam-stream"));
 
     const motorNames = {
       0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
