@@ -1,10 +1,8 @@
-const SNAPSHOT_URL = "https://swimmable-abstract-dreamboat.ngrok-free.dev/snapshot.jpg";
+const SNAPSHOT_URL = "https://camera.domainjin.io.vn/snapshot.jpg";
 
 export default async function handler(req, res) {
   try {
-    const upstream = await fetch(SNAPSHOT_URL, {
-      headers: { "ngrok-skip-browser-warning": "true" },
-    });
+    const upstream = await fetch(SNAPSHOT_URL);
 
     if (!upstream.ok) {
       res.status(upstream.status).end();
