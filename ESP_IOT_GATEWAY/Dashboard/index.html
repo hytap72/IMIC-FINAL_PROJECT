@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 IoT Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f5f5f4;
+      --bg-tertiary: #f0efed;
+      --text-primary: #1a1a18;
+      --text-secondary: #6b6b67;
+      --text-tertiary: #9b9b96;
+      --border-light: rgba(0,0,0,0.08);
+      --border-mid: rgba(0,0,0,0.14);
+      --blue: #185fa5;
+      --blue-bg: #e6f1fb;
+      --blue-text: #185fa5;
+      --green: #2d9f5f;
+      --green-bg: #eaf3de;
+      --green-text: #3b6d11;
+      --amber: #ef9f27;
+      --amber-bg: #faeeda;
+      --amber-text: #854f0b;
+      --red: #d85a30;
+      --red-bg: #faece7;
+      --red-text: #993c1d;
+      --purple-bg: #EEEDFE;
+      --purple-text: #534AB7;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #1a1a18;
+        --bg-secondary: #242422;
+        --bg-tertiary: #2c2c2a;
+        --text-primary: #f0efed;
+        --text-secondary: #9b9b96;
+        --text-tertiary: #6b6b67;
+        --border-light: rgba(255,255,255,0.08);
+        --border-mid: rgba(255,255,255,0.14);
+        --blue-bg: #0c2d4a;
+        --blue-text: #85b7eb;
+        --green-bg: #0f2a14;
+        --green-text: #97c459;
+        --amber-bg: #2e1e05;
+        --amber-text: #fac775;
+        --red-bg: #2e1008;
+        --red-text: #f09595;
+        --purple-bg: #1e1c40;
+        --purple-text: #AFA9EC;
+      }
+    }
+
+    html, body { height: 100%; }
+    body { font-family: var(--font-sans); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+
+    /* ── LAYOUT ── */
+    .app { display: grid; grid-template-rows: 49px 1fr; height: 100vh; }
+    .app-body { display: grid; grid-template-columns: 200px 1fr 230px; overflow: hidden; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+      background: var(--bg-primary);
+      border-bottom: 0.5px solid var(--border-light);
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse 2.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .device-name { font-size: 14px; font-weight: 500; }
+    .device-sub { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
+    .topbar-right { display: flex; align-items: center; gap: 6px; }
+    .pill {
+      font-size: 11px; font-family: var(--font-mono);
+      padding: 3px 9px; border-radius: 99px;
+      border: 0.5px solid var(--border-light);
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .pill.ok { background: var(--green-bg); color: var(--green-text); border-color: transparent; }
+    .pill.warn { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; }
+    #clock { font-family: var(--font-mono); font-size: 12px; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      background: var(--bg-primary);
+      border-right: 0.5px solid var(--border-light);
+      padding: 12px 0;
+      overflow-y: auto;
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .nav-section {
+      font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase;
+      color: var(--text-tertiary); font-family: var(--font-mono);
+      padding: 10px 16px 4px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 16px; cursor: pointer;
+      border-left: 2px solid transparent;
+      font-size: 13px; color: var(--text-secondary);
+      transition: background 0.12s, color 0.12s;
+    }
+    .nav-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .nav-item.active { border-left-color: var(--blue); background: var(--blue-bg); color: var(--blue-text); }
+    .nav-item i { font-size: 16px; width: 18px; flex-shrink: 0; }
+    .nav-item .nav-badge {
+      margin-left: auto; font-size: 10px; font-family: var(--font-mono);
+      padding: 1px 6px; border-radius: 99px;
+      background: var(--bg-tertiary); color: var(--text-tertiary);
+    }
+
+    /* ── MAIN CONTENT ── */
+    .content { overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; }
+
+    .section-label {
+      font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px;
+    }
+
+    /* ── SENSOR GRID ── */
+    .sensor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+    .sensor-card {
+      background: var(--bg-primary);
+      border: 0.5px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      position: relative; overflow: hidden;
+    }
+    .sensor-card::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+    }
+    .sensor-card.temp::before { background: var(--amber); }
+    .sensor-card.hum::before  { background: var(--blue); }
+    .sensor-card.press::before { background: var(--purple-text); }
+    .sensor-card.light::before { background: #f1c40f; }
+    .sensor-card.batt::before { background: var(--red); }
+
+    .sensor-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .sensor-name { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 5px; }
+    .sensor-chip { font-size: 9px; padding: 1px 6px; border-radius: 99px; background: var(--bg-secondary); color: var(--text-tertiary); font-family: var(--font-mono); }
+    .sensor-val { font-size: 28px; font-weight: 500; font-family: var(--font-mono); color: var(--text-primary); line-height: 1; }
+    .sensor-unit { font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+    .sensor-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; font-family: var(--font-mono); }
+    .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; flex-shrink: 0; }
+
+    .batt-bar { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    .batt-fill { height: 100%; border-radius: 2px; transition: width 0.6s; }
+
+    /* IMU card spanning 2 cols */
+    .sensor-card.imu { grid-column: 1 / -1; }
+    .imu-axes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 10px; }
+    .axis { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 8px; text-align: center; }
+    .axis-label { font-size: 9px; color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: 3px; }
+    .axis-val { font-size: 14px; font-weight: 500; font-family: var(--font-mono); color: var(--text-primary); }
+
+    /* ── CHART ── */
+    .chart-card {
+      background: var(--bg-primary);
+      border: 0.5px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+    }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .chart-title { font-size: 13px; font-weight: 500; }
+    .chart-meta { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
+
+    /* ── CONTROL ── */
+    .ctrl-card {
+      background: var(--bg-primary);
+      border: 0.5px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+    }
+    .ctrl-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid var(--border-light); }
+    .ctrl-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .ctrl-info .ctrl-name { font-size: 13px; font-weight: 500; }
+    .ctrl-info .ctrl-sub { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 1px; }
+    /* Toggle */
+    .toggle { width: 36px; height: 20px; border-radius: 99px; background: var(--bg-secondary); border: 0.5px solid var(--border-mid); cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .toggle.on { background: var(--blue); border-color: var(--blue); }
+    .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+    .toggle.on::after { transform: translateX(16px); }
+    .status-msg { font-size: 11px; font-family: var(--font-mono); color: var(--blue-text); min-height: 16px; margin-top: 6px; text-align: center; }
+
+    /* ── RIGHT PANEL ── */
+    .right-panel {
+      background: var(--bg-primary);
+      border-left: 0.5px solid var(--border-light);
+      padding: 16px;
+      overflow-y: auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .panel-block { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+
+    /* OTA */
+    .ota-card {
+      border: 0.5px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+    }
+    .ota-ver { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+    .ota-ver .label { color: var(--text-secondary); font-family: var(--font-mono); }
+    .ota-ver .val { font-family: var(--font-mono); font-weight: 500; }
+    .ota-ver .val.new { color: var(--blue-text); }
+    .ota-progress { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin: 10px 0 8px; overflow: hidden; }
+    .ota-bar { height: 100%; width: 0%; background: var(--blue); border-radius: 2px; transition: width 0.35s ease; }
+    .ota-msg { font-size: 10px; font-family: var(--font-mono); color: var(--text-tertiary); text-align: center; margin-bottom: 8px; min-height: 14px; }
+
+    /* File input custom */
+    .file-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; padding: 7px 12px;
+      border: 0.5px dashed var(--border-mid);
+      border-radius: var(--radius-md);
+      cursor: pointer; color: var(--text-secondary);
+      margin-bottom: 8px;
+      transition: background 0.12s;
+    }
+    .file-label:hover { background: var(--bg-secondary); }
+    #firmwareFile { display: none; }
+    #file-chosen { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Buttons */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 12px; padding: 8px 14px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-mid);
+      cursor: pointer; font-family: var(--font-sans);
+      background: var(--bg-primary); color: var(--text-primary);
+      width: 100%; transition: background 0.12s;
+    }
+    .btn:hover { background: var(--bg-secondary); }
+    .btn.primary { background: var(--blue); color: white; border-color: var(--blue); }
+    .btn.primary:hover { background: #0c447c; border-color: #0c447c; }
+    .btn i { font-size: 15px; }
+
+    /* Log box */
+    .log-box {
+      border: 0.5px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-tertiary);
+      padding: 8px 10px;
+      overflow-y: auto;
+    }
+    .log-line { font-size: 10px; font-family: var(--font-mono); line-height: 1.9; color: var(--text-secondary); }
+    .log-line.ok { color: var(--green-text); }
+    .log-line.info { color: var(--blue-text); }
+    .log-line.err { color: var(--red-text); }
+    .log-time { color: var(--text-tertiary); margin-right: 6px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="dot"></div>
+      <div>
+        <div class="device-name">ESP32 IoT Dashboard</div>
+        <div class="device-sub">device: ESP32_IMIC_FINAL_PROJECT · MQTT TLS · AWS ap-southeast-1</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill ok"><i class="ti ti-cloud" style="font-size:12px"></i> AWS IoT</span>
+      <span class="pill ok">BLE GATT</span>
+      <span class="pill warn" id="batt-pill"><i class="ti ti-battery-2" style="font-size:12px"></i> --%</span>
+      <span class="pill" id="clock">--:--:--</span>
+    </div>
+  </div>
+
+  <div class="app-body">
+
+    <nav class="sidebar">
+      <div class="nav-section">Monitor</div>
+      <div class="nav-item active" onclick="showTab('overview',this)">
+        <i class="ti ti-layout-dashboard"></i> Overview
+      </div>
+      <div class="nav-item" onclick="showTab('telemetry',this)">
+        <i class="ti ti-chart-line"></i> Telemetry
+        <span class="nav-badge">live</span>
+      </div>
+      <div class="nav-item" onclick="showTab('imu',this)">
+        <i class="ti ti-3d-cube-sphere"></i> IMU / Motion
+      </div>
+      <div class="nav-section">Control</div>
+      <div class="nav-item" onclick="showTab('control',this)">
+        <i class="ti ti-toggles"></i> GPIO / Relay
+      </div>
+      <div class="nav-section">System</div>
+      <div class="nav-item" onclick="showTab('ota',this)">
+        <i class="ti ti-cloud-upload"></i> OTA Update
+      </div>
+      <div class="nav-item" onclick="showTab('log',this)">
+        <i class="ti ti-terminal-2"></i> System Log
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <div id="tab-overview">
+        <div class="section-label">Sensor readings — I²C bus</div>
+        <div class="sensor-grid">
+
+          <div class="sensor-card temp">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-temperature" style="font-size:14px"></i> Nhiệt độ
+                <span class="sensor-chip">BME280</span>
+              </div>
+              <div class="live-dot"></div>
+            </div>
+            <div class="sensor-val" id="txt-temp">--<span class="sensor-unit">°C</span></div>
+            <div class="sensor-sub" id="sub-temp">đang tải...</div>
+          </div>
+
+          <div class="sensor-card hum">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-droplet" style="font-size:14px"></i> Độ ẩm
+                <span class="sensor-chip">BME280</span>
+              </div>
+              <div class="live-dot"></div>
+            </div>
+            <div class="sensor-val" id="txt-hum">--<span class="sensor-unit">%</span></div>
+            <div class="sensor-sub" id="sub-hum">đang tải...</div>
+          </div>
+
+          <div class="sensor-card press">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-gauge" style="font-size:14px"></i> Áp suất
+                <span class="sensor-chip">BME280</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-press">--<span class="sensor-unit">hPa</span></div>
+            <div class="sensor-sub">sea-level ref</div>
+          </div>
+
+          <div class="sensor-card light">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-sun" style="font-size:14px"></i> Ánh sáng
+                <span class="sensor-chip">BH1750</span>
+              </div>
+              <div class="live-dot"></div>
+            </div>
+            <div class="sensor-val" id="txt-light">--<span class="sensor-unit">lx</span></div>
+            <div class="sensor-sub" id="sub-light">đang tải...</div>
+          </div>
+
+          <div class="sensor-card batt">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-battery-charging" style="font-size:14px"></i> Pin
+                <span class="sensor-chip">MAX17048</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-bat">--<span class="sensor-unit">%</span></div>
+            <div class="sensor-sub" id="sub-bat">đang tải...</div>
+            <div class="batt-bar"><div class="batt-fill" id="batt-fill" style="width:0%; background:var(--green)"></div></div>
+          </div>
+
+          <div class="sensor-card" style="grid-column:2">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-3d-cube-sphere" style="font-size:14px"></i> IMU
+                <span class="sensor-chip">BNO085</span>
+              </div>
+            </div>
+            <div class="imu-axes" style="grid-template-columns: repeat(3,1fr); margin-top:6px;">
+              <div class="axis"><div class="axis-label">Accel X</div><div class="axis-val" id="ax">--</div></div>
+              <div class="axis"><div class="axis-label">Accel Y</div><div class="axis-val" id="ay">--</div></div>
+              <div class="axis"><div class="axis-label">Accel Z</div><div class="axis-val" id="az">--</div></div>
+              <div class="axis"><div class="axis-label">Gyro X</div><div class="axis-val" id="gx">--</div></div>
+              <div class="axis"><div class="axis-label">Gyro Y</div><div class="axis-val" id="gy">--</div></div>
+              <div class="axis"><div class="axis-label">Yaw</div><div class="axis-val" id="gz">--</div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="tab-telemetry" style="display:none">
+        <div class="section-label">Lịch sử telemetry — 15 điểm gần nhất</div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Nhiệt độ & Độ ẩm</span>
+            <span class="chart-meta" id="chart-updated">cập nhật lúc --:--:--</span>
+          </div>
+          <canvas id="telemetryChart" height="90"></canvas>
+        </div>
+      </div>
+
+      <div id="tab-imu" style="display:none">
+        <div class="section-label">BNO085 — 9-DoF IMU over I²C</div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Gia tốc & Gyroscope</span>
+            <span class="chart-meta" id="imu-updated">--:--:--</span>
+          </div>
+          <canvas id="imuChart" height="90"></canvas>
+        </div>
+        <div class="sensor-card imu" style="margin-top:12px; border-radius:var(--radius-lg); background:var(--bg-primary);">
+          <div class="sensor-name"><i class="ti ti-3d-cube-sphere" style="font-size:14px"></i> Raw axes</div>
+          <div class="imu-axes">
+            <div class="axis"><div class="axis-label">Accel X</div><div class="axis-val" id="ax2">--</div></div>
+            <div class="axis"><div class="axis-label">Accel Y</div><div class="axis-val" id="ay2">--</div></div>
+            <div class="axis"><div class="axis-label">Accel Z</div><div class="axis-val" id="az2">--</div></div>
+            <div class="axis"><div class="axis-label">Gyro X</div><div class="axis-val" id="gx2">--</div></div>
+            <div class="axis"><div class="axis-label">Gyro Y</div><div class="axis-val" id="gy2">--</div></div>
+            <div class="axis"><div class="axis-label">Yaw °</div><div class="axis-val" id="gz2">--</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-control" style="display:none">
+        <div class="section-label">GPIO / LED / Relay — Digital Output</div>
+        <div class="ctrl-card">
+          <div class="ctrl-row">
+            <div class="ctrl-info">
+              <div class="ctrl-name">LED 1 — Status indicator</div>
+              <div class="ctrl-sub">GPIO 2 · digital output</div>
+            </div>
+            <div class="toggle" id="t-led" onclick="toggleDevice('t-led','led','LED 1')"></div>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-info">
+              <div class="ctrl-name">Relay 1 — Load switch</div>
+              <div class="ctrl-sub">GPIO 26 · digital output</div>
+            </div>
+            <div class="toggle" id="t-relay" onclick="toggleDevice('t-relay','relay','Relay 1')"></div>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-info">
+              <div class="ctrl-name">LED 2 — Alert indicator</div>
+              <div class="ctrl-sub">GPIO 4 · digital output</div>
+            </div>
+            <div class="toggle" id="t-led2" onclick="toggleDevice('t-led2','led2','LED 2')"></div>
+          </div>
+          <div class="status-msg" id="control-status"></div>
+        </div>
+      </div>
+
+      <div id="tab-ota" style="display:none">
+        <div class="section-label">OTA firmware update — AWS S3 + Lambda</div>
+        <div class="ctrl-card">
+          <div class="ota-card" style="border:none; padding:0">
+            <div class="ota-ver"><span class="label">Phiên bản hiện tại</span><span class="val" id="current-ver">v0</span></div>
+            <div class="ota-ver"><span class="label">Bản cập nhật tiếp theo</span><span class="val new" id="next-ver">v1</span></div>
+            <div class="ota-ver"><span class="label">Trạng thái</span><span class="val" id="ota-state">sẵn sàng</span></div>
+            <div class="ota-progress"><div class="ota-bar" id="ota-bar"></div></div>
+            <div class="ota-msg" id="ota-msg">Chọn file .bin để cập nhật</div>
+            <label class="file-label" for="firmwareFile">
+              <i class="ti ti-file-upload" style="font-size:16px"></i>
+              <span id="file-chosen">Chọn file firmware (.bin)</span>
+            </label>
+            <input type="file" id="firmwareFile" accept=".bin" onchange="onFileChosen(this)">
+            <button class="btn primary" onclick="uploadFirmware()">
+              <i class="ti ti-cloud-upload"></i> Tải lên S3 &amp; Flash
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-log" style="display:none">
+        <div class="section-label">System log — BLE GATT / MQTT</div>
+        <div class="ctrl-card" style="gap:0">
+          <div class="log-box" id="logbox" style="max-height:320px">
+            <div class="log-line ok"><span class="log-time">--:--:--</span>Hệ thống sẵn sàng</div>
+          </div>
+          <button class="btn" style="margin-top:10px" onclick="document.getElementById('logbox').innerHTML=''">
+            <i class="ti ti-trash"></i> Xóa log
+          </button>
+        </div>
+      </div>
+
+    </main>
+
+    <aside class="right-panel">
+      <div class="panel-block" style="height: 100%;">
+        <div class="section-label">Log gần đây</div>
+        <div class="log-box" id="logbox-side" style="height: 100%; max-height: calc(100vh - 80px);">
+          <div class="log-line ok"><span class="log-time">--:--</span>MQTT connected</div>
+          <div class="log-line info"><span class="log-time">--:--</span>Shadow synced</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+  // ===================================================
+  // CẤU HÌNH API
+  const API_BASE_URL = "https://7t751aiha6.execute-api.ap-southeast-1.amazonaws.com";
+  // ===================================================
+
+  // ── KHỞI TẠO BIẾN QUẢN LÝ PHIÊN BẢN OTA (Lưu trong LocalStorage) ──
+  let otaCounter = parseInt(localStorage.getItem('otaVersionCounter') || '1');
+  
+  function updateOtaLabels() {
+    document.getElementById('current-ver').textContent = 'v' + (otaCounter > 1 ? otaCounter - 1 : 0);
+    document.getElementById('next-ver').textContent = 'v' + otaCounter;
+  }
+  updateOtaLabels(); // Gọi lần đầu để hiển thị đúng số
+
+  // ── CLOCK ──
+  function tick() {
+    const t = new Date().toTimeString().slice(0,8);
+    document.getElementById('clock').textContent = t;
+  }
+  setInterval(tick, 1000); tick();
+
+  // ── TAB NAVIGATION ──
+  const tabs = ['overview','telemetry','imu','control','ota','log'];
+  function showTab(name, el) {
+    tabs.forEach(t => {
+      document.getElementById('tab-'+t).style.display = t===name ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if(el) el.classList.add('active');
+  }
+
+  // ── CHART SETUP ──
+  const chartCtx = document.getElementById('telemetryChart').getContext('2d');
+  const telChart = new Chart(chartCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Nhiệt độ (°C)', borderColor: '#ef9f27', backgroundColor: 'rgba(239,159,39,0.07)', data: [], tension: 0.4, fill: true, pointRadius: 3 },
+        { label: 'Độ ẩm (%)',    borderColor: '#378add', backgroundColor: 'rgba(55,138,221,0.07)', data: [], tension: 0.4, fill: true, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { family: 'IBM Plex Mono', size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } },
+        y: { beginAtZero: false, ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } }
+      }
+    }
+  });
+
+  const imuCtx = document.getElementById('imuChart').getContext('2d');
+  const imuChart = new Chart(imuCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Accel X', borderColor: '#d85a30', data: [], tension: 0.4, pointRadius: 2 },
+        { label: 'Accel Y', borderColor: '#7f77dd', data: [], tension: 0.4, pointRadius: 2 },
+        { label: 'Accel Z', borderColor: '#1d9e75', data: [], tension: 0.4, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { family: 'IBM Plex Mono', size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } },
+        y: { ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } }
+      }
+    }
+  });
+
+  // ── TELEMETRY FETCH ──
+  async function fetchTelemetry() {
+    try {
+      const res = await fetch(API_BASE_URL + "/get-telemetry");
+      const list = await res.json();
+      if (!list.length) return;
+
+      const latest = list[0];
+      const temp = parseFloat(latest.temperature) || 0;
+      const hum  = parseFloat(latest.humidity)    || 0;
+      const lux  = parseFloat(latest.light)        || 0;
+      const bat  = parseFloat(latest.battery)      || 85;
+      const press= parseFloat(latest.pressure)     || 1013;
+
+      // Cards
+      document.getElementById('txt-temp').innerHTML  = temp.toFixed(1) + '<span class="sensor-unit">°C</span>';
+      document.getElementById('txt-hum').innerHTML   = Math.round(hum) + '<span class="sensor-unit">%</span>';
+      document.getElementById('txt-press').innerHTML = Math.round(press) + '<span class="sensor-unit">hPa</span>';
+      document.getElementById('txt-light').innerHTML = Math.round(lux) + '<span class="sensor-unit">lx</span>';
+      document.getElementById('txt-bat').innerHTML   = Math.round(bat) + '<span class="sensor-unit">%</span>';
+
+      // Battery bar
+      const fill = document.getElementById('batt-fill');
+      fill.style.width = Math.round(bat) + '%';
+      fill.style.background = bat > 50 ? 'var(--green)' : bat > 20 ? 'var(--amber)' : 'var(--red)';
+
+      // Topbar battery pill
+      document.getElementById('batt-pill').innerHTML =
+        '<i class="ti ti-battery-2" style="font-size:12px"></i> ' + Math.round(bat) + '%';
+
+      document.getElementById('sub-temp').textContent = 'feels like ' + (temp+1.7).toFixed(1) + '°C';
+      document.getElementById('sub-hum').textContent  = 'dew point ' + (temp - (100-hum)/5).toFixed(1) + '°C';
+      document.getElementById('sub-light').textContent = lux > 500 ? 'indoor daylight' : lux > 100 ? 'indoor ambient' : 'low light';
+      document.getElementById('sub-bat').textContent   = bat.toFixed(0) + '% · ~' + Math.round(bat/25) + 'h remain';
+
+      // IMU mock
+      const ax = parseFloat(latest.accel_x ?? (Math.random()*0.2-0.1+0.12).toFixed(2));
+      const ay = parseFloat(latest.accel_y ?? (Math.random()*0.1-0.05-0.03).toFixed(2));
+      const az = parseFloat(latest.accel_z ?? (9.78 + Math.random()*0.04).toFixed(2));
+      ['ax','ay','az','ax2','ay2','az2'].forEach((id,i) => {
+        document.getElementById(id) && (document.getElementById(id).textContent = [ax,ay,az][i%3].toFixed(2));
+      });
+      const gyvals = [(Math.random()*0.04-0.02).toFixed(2),(Math.random()*0.04-0.02).toFixed(2),(142+Math.random()*2).toFixed(0)+'°'];
+      ['gx','gy','gz','gx2','gy2','gz2'].forEach((id,i) => {
+        document.getElementById(id) && (document.getElementById(id).textContent = gyvals[i%3]);
+      });
+
+      // Chart data
+      const pts = list.slice(0,15).reverse();
+      const labels = pts.map(i => new Date(i.timestamp).toLocaleTimeString('vi-VN'));
+      telChart.data.labels = labels;
+      telChart.data.datasets[0].data = pts.map(i => parseFloat(i.temperature));
+      telChart.data.datasets[1].data = pts.map(i => parseFloat(i.humidity));
+      telChart.update();
+
+      imuChart.data.labels = labels;
+      imuChart.data.datasets[0].data = pts.map(i => parseFloat(i.accel_x ?? (Math.random()*0.2-0.1+0.12).toFixed(2)));
+      imuChart.data.datasets[1].data = pts.map(i => parseFloat(i.accel_y ?? (Math.random()*0.1-0.05).toFixed(2)));
+      imuChart.data.datasets[2].data = pts.map(i => parseFloat(i.accel_z ?? (9.78 + Math.random()*0.04).toFixed(2)));
+      imuChart.update();
+
+      const now = new Date().toTimeString().slice(0,8);
+      document.getElementById('chart-updated').textContent = 'cập nhật lúc ' + now;
+      document.getElementById('imu-updated').textContent = now;
+
+      addLog('','Telemetry → MQTT · T:'+temp.toFixed(1)+'°C H:'+Math.round(hum)+'%');
+    } catch(e) {
+      console.error('Fetch error:', e);
+      addLog('err', 'API fetch error: ' + e.message);
+    }
+  }
+
+  // ── DEVICE CONTROL ──
+  function toggleDevice(toggleId, key, label) {
+    const el = document.getElementById(toggleId);
+    el.classList.toggle('on');
+    const isOn = el.classList.contains('on');
+    const cmd = isOn ? 'ON' : 'OFF';
+    const st = document.getElementById('control-status');
+    if(st) { st.textContent = `Đang gửi ${label} = ${cmd}…`; }
+
+    fetch(API_BASE_URL + "/control-device", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: "ESP32_IMIC_FINAL_PROJECT", [key]: cmd })
+    })
+    .then(r => {
+      if(st) { st.textContent = r.ok ? `${label} đã ${cmd}` : 'Lỗi API'; }
+      if(st) setTimeout(() => st.textContent = '', 3000);
+      addLog(r.ok ? 'ok' : 'err', `${label} → ${cmd}`);
+    })
+    .catch(e => { if(st) st.textContent = 'Lỗi kết nối'; addLog('err', e.message); });
+  }
+
+  // ── OTA TỰ ĐỘNG ĐỔI TÊN VERSION ──
+  function onFileChosen(input) {
+    document.getElementById('file-chosen').textContent = input.files[0] ? input.files[0].name : 'Chọn file firmware (.bin)';
+  }
+
+  async function uploadFirmware() {
+    const fileInput = document.getElementById('firmwareFile');
+    const otaMsg = document.getElementById('ota-msg');
+    const otaState = document.getElementById('ota-state');
+
+    if (!fileInput.files.length) { 
+        otaMsg.textContent = '❌ Lỗi: Vui lòng click vào biểu tượng đám mây để chọn file .bin trước!';
+        otaMsg.style.color = 'var(--red)';
+        otaState.textContent = 'chưa có file';
+        return; 
+    }
+
+    otaMsg.style.color = ''; 
+    const file = fileInput.files[0];
+    
+    // Tạo tên file mới có chứa version (VD: firmware_v1.bin)
+    const originalName = file.name;
+    const extension = originalName.includes('.') ? originalName.substring(originalName.lastIndexOf('.')) : '.bin';
+    const baseName = originalName.includes('.') ? originalName.substring(0, originalName.lastIndexOf('.')) : originalName;
+    const versionedFileName = `${baseName}_v${otaCounter}${extension}`;
+
+    otaMsg.textContent = `Đang xin quyền upload cho ${versionedFileName}...`;
+    otaState.textContent = 'đang xử lý...';
+
+    try {
+      // Gọi API lấy link S3 với tên file đã được gắn version
+      const res = await fetch(`${API_BASE_URL}/get-upload-url?filename=${encodeURIComponent(versionedFileName)}`);
+      const data = await res.json();
+      
+      otaMsg.textContent = 'Đang đẩy file lên S3...';
+      animateOTA('ota-bar', 0);
+      
+      // Upload file lên S3
+      const uploadRes = await fetch(data.upload_url, {
+        method: 'PUT', body: file,
+        headers: { 'Content-Type': 'application/octet-stream' }
+      });
+
+      if (uploadRes.ok) {
+        animateOTA('ota-bar', 100);
+        otaMsg.textContent = 'Upload thành công · Đang ra lệnh cập nhật...';
+        
+        // Link S3 chứa file version mới
+        const s3_download_url = `https://esp32-aws-s3-demo-imic.s3.ap-southeast-1.amazonaws.com/${data.s3_path}`;
+
+        try {
+            // Bắn link xuống mạch qua MQTT
+            const mqttRes = await fetch(API_BASE_URL + "/control-device", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ device_id: "ESP32_IMIC_FINAL_PROJECT", ota_url: s3_download_url })
+            });
+            
+            if(mqttRes.ok) {
+                otaMsg.textContent = `Đã gửi lệnh tải bản v${otaCounter} · ESP32 đang nạp và Reboot...`;
+                otaState.textContent = 'flashing...';
+                addLog('info', `Gửi lệnh OTA bản v${otaCounter} thành công`);
+                
+                // Cập nhật thành công -> Tăng biến Version và lưu lại vào trình duyệt
+                otaCounter++;
+                localStorage.setItem('otaVersionCounter', otaCounter);
+                updateOtaLabels(); // Update số hiển thị trên giao diện
+            } else {
+                throw new Error('API MQTT báo lỗi');
+            }
+        } catch(err) {
+            otaMsg.textContent = 'Lỗi gửi lệnh MQTT: ' + err.message;
+            otaState.textContent = 'error';
+        }
+      } else throw new Error('S3 từ chối Upload');
+    } catch(e) {
+      otaMsg.textContent = 'Lỗi: ' + e.message;
+      otaState.textContent = 'error';
+      addLog('err', 'OTA error: ' + e.message);
+    }
+  }
+
+  function animateOTA(barId, startVal) {
+    const bar = document.getElementById(barId);
+    if (!bar) return;
+    bar.style.width = startVal + '%';
+  }
+
+  // ── LOG ──
+  function addLog(type, txt) {
+    const t = new Date().toTimeString().slice(0,5);
+    ['logbox','logbox-side'].forEach(id => {
+      const box = document.getElementById(id);
+      if (!box) return;
+      const line = document.createElement('div');
+      line.className = 'log-line ' + type;
+      line.innerHTML = `<span class="log-time">${t}</span>${txt}`;
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+      // Keep max 60 lines
+      while (box.children.length > 60) box.removeChild(box.firstChild);
+    });
+  }
+
+  // ── BOOT ──
+  fetchTelemetry();
+  setInterval(fetchTelemetry, 5000);
+</script>
+</body>
+</html>
