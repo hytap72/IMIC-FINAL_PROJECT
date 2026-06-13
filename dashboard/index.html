@@ -48,6 +48,36 @@
     border-radius: 10px; overflow: hidden; background: #1c1f26;
   }
   .camera canvas { display: block; width: 100%; }
+
+  .compass {
+    max-width: 600px; margin-bottom: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .compass-dial {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: #1c1f26; border: 2px solid #2a2e38;
+    position: relative;
+  }
+  .compass-tick {
+    position: absolute; font-size: 0.75rem; color: #999;
+    transform: translate(-50%, -50%);
+  }
+  .compass-tick.n { top: 10px; left: 50%; color: #f44336; }
+  .compass-tick.s { bottom: 10px; left: 50%; top: auto; }
+  .compass-tick.e { top: 50%; right: 10px; left: auto; }
+  .compass-tick.w { top: 50%; left: 10px; }
+  .compass-needle {
+    position: absolute; top: 50%; left: 50%;
+    width: 4px; height: 46px;
+    background: linear-gradient(to top, #2563eb 50%, #f44336 50%);
+    transform-origin: 50% 50%;
+    transform: translate(-50%, -100%) rotate(0deg);
+    border-radius: 2px;
+    transition: transform 0.4s ease;
+  }
+  .compass-value {
+    font-size: 1.1rem; font-weight: bold; font-family: monospace;
+  }
 </style>
 </head>
 <body>
@@ -60,6 +90,17 @@
     <div class="card"><div class="label">Pin (V)</div><div class="value" id="val-batt">--</div></div>
     <div class="card"><div class="label">Pin (%)</div><div class="value" id="val-soc">--</div></div>
     <div class="card"><div class="label">Trạng thái</div><div class="value" id="val-motor">--</div></div>
+  </div>
+
+  <div class="compass">
+    <div class="compass-dial">
+      <span class="compass-tick n">N</span>
+      <span class="compass-tick e">E</span>
+      <span class="compass-tick s">S</span>
+      <span class="compass-tick w">W</span>
+      <div class="compass-needle" id="compass-needle"></div>
+    </div>
+    <div class="compass-value" id="val-heading">--°</div>
   </div>
 
   <div class="camera">
@@ -224,6 +265,12 @@
           document.getElementById("val-batt").textContent  = d.battery_voltage > -900 ? d.battery_voltage.toFixed(2) + " V" : "--";
           document.getElementById("val-soc").textContent   = d.battery_soc  > -900 ? d.battery_soc.toFixed(1) + " %"  : "--";
           document.getElementById("val-motor").textContent = motorNames[d.motor_state] ?? d.motor_state;
+
+          if (typeof d.heading === "number") {
+            document.getElementById("val-heading").textContent = d.heading.toFixed(0) + "°";
+            document.getElementById("compass-needle").style.transform =
+              "translate(-50%, -100%) rotate(" + d.heading + "deg)";
+          }
         } catch (e) {
           console.error("Bad payload", e);
         }

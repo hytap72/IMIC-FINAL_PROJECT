@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -46,6 +47,11 @@ static volatile float s_gyro_x   = 0.0f;
 static volatile float s_gyro_y   = 0.0f;
 static volatile float s_gyro_z   = 0.0f;
 
+/* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
+ * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
+ * theo thời gian do sai số tích lũy của gyroscope. */
+static volatile float s_heading  = 0.0f;
+
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
 {
@@ -64,6 +70,12 @@ static void sensor_task(void *pvParameters)
                 s_gyro_x  = m_mpu6050.gyro_x;
                 s_gyro_y  = m_mpu6050.gyro_y;
                 s_gyro_z  = m_mpu6050.gyro_z;
+
+                /* Tích phân gyro_z (độ/giây) theo chu kỳ lấy mẫu để ra góc heading */
+                float heading = s_heading + s_gyro_z * (SENSOR_SAMPLE_INTERVAL_MS / 1000.0f);
+                heading = fmodf(heading, 360.0f);
+                if (heading < 0.0f) heading += 360.0f;
+                s_heading = heading;
             }
 
             xSemaphoreGive(i2c_mutex);
@@ -71,8 +83,8 @@ static void sensor_task(void *pvParameters)
 
         ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%, Batt: %.2f V (%.1f %%), Lux: %.2f",
                  s_temp, s_hum, s_bat_volt, s_bat_soc, s_lux);
-        ESP_LOGI(TAG, "Accel: %.2f, %.2f, %.2f g | Gyro: %.2f, %.2f, %.2f deg/s",
-                 s_accel_x, s_accel_y, s_accel_z, s_gyro_x, s_gyro_y, s_gyro_z);
+        ESP_LOGI(TAG, "Accel: %.2f, %.2f, %.2f g | Gyro: %.2f, %.2f, %.2f deg/s | Heading: %.1f deg",
+                 s_accel_x, s_accel_y, s_accel_z, s_gyro_x, s_gyro_y, s_gyro_z, s_heading);
 
         vTaskDelay(pdMS_TO_TICKS(SENSOR_SAMPLE_INTERVAL_MS));
     }
@@ -87,17 +99,18 @@ static void telemetry_task(void *pvParameters)
         float hum      = s_hum;
         float bat_volt = s_bat_volt;
         float bat_soc  = s_bat_soc;
+        float heading  = s_heading;
         motor_cmd_t motor_state = driver_motor_get_state();
 
         if (aws_iot_is_connected()) {
-            aws_iot_publish_telemetry(temp, hum, bat_volt, bat_soc, (uint8_t)motor_state);
+            aws_iot_publish_telemetry(temp, hum, bat_volt, bat_soc, heading, (uint8_t)motor_state);
         }
 
         if (udp_client_is_ready()) {
-            char payload[96];
+            char payload[112];
             int len = snprintf(payload, sizeof(payload),
-                                "{\"temp\":%.2f,\"hum\":%.2f,\"batt_v\":%.2f,\"soc\":%.1f,\"motor\":%d}",
-                                temp, hum, bat_volt, bat_soc, (int)motor_state);
+                                "{\"temp\":%.2f,\"hum\":%.2f,\"batt_v\":%.2f,\"soc\":%.1f,\"heading\":%.1f,\"motor\":%d}",
+                                temp, hum, bat_volt, bat_soc, heading, (int)motor_state);
             udp_client_send(payload, len);
         }
 
