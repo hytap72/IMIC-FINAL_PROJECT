@@ -1,0 +1,5 @@
+#ifndef CORE_MQTT_CONFIG_H
+#define CORE_MQTT_CONFIG_H
+
+
+#endif /* CORE_MQTT_CONFIG_H */
