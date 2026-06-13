@@ -2,307 +2,711 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>IMIC Robot - Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IMIC Robot Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background: #0f1115; color: #eee; margin: 0; padding: 16px;
-  }
-  h1 { font-size: 1.3rem; margin: 0 0 4px; }
-  .status { font-size: 0.85rem; margin-bottom: 16px; }
-  .status.ok    { color: #4caf50; }
-  .status.err   { color: #f44336; }
-  .status.wait  { color: #ffb300; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 10px; margin-bottom: 24px; max-width: 600px;
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f4;
+    --bg-tertiary: #f0efed;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6b67;
+    --text-tertiary: #9b9b96;
+    --border-light: rgba(0,0,0,0.08);
+    --border-mid: rgba(0,0,0,0.14);
+    --blue: #185fa5;
+    --blue-bg: #e6f1fb;
+    --blue-text: #185fa5;
+    --green: #2d9f5f;
+    --green-bg: #eaf3de;
+    --green-text: #3b6d11;
+    --amber: #ef9f27;
+    --amber-bg: #faeeda;
+    --amber-text: #854f0b;
+    --red: #d85a30;
+    --red-bg: #faece7;
+    --red-text: #993c1d;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
   }
-  .card {
-    background: #1c1f26; border-radius: 10px; padding: 12px; text-align: center;
-  }
-  .card .label { font-size: 0.75rem; color: #999; }
-  .card .value { font-size: 1.4rem; font-weight: bold; margin-top: 4px; }
 
-  .pad {
-    display: grid;
-    grid-template-columns: repeat(3, 80px);
-    grid-template-rows: repeat(3, 80px);
-    gap: 8px; max-width: 280px; margin: 0 auto;
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: #1a1a18;
+      --bg-secondary: #242422;
+      --bg-tertiary: #2c2c2a;
+      --text-primary: #f0efed;
+      --text-secondary: #9b9b96;
+      --text-tertiary: #6b6b67;
+      --border-light: rgba(255,255,255,0.08);
+      --border-mid: rgba(255,255,255,0.14);
+      --blue-bg: #0c2d4a;
+      --blue-text: #85b7eb;
+      --green-bg: #0f2a14;
+      --green-text: #97c459;
+      --amber-bg: #2e1e05;
+      --amber-text: #fac775;
+      --red-bg: #2e1008;
+      --red-text: #f09595;
+    }
   }
-  .pad button {
-    font-size: 1.6rem; border: none; border-radius: 12px;
-    background: #2563eb; color: #fff; cursor: pointer;
-    user-select: none; touch-action: manipulation;
+
+  html, body { height: 100%; }
+  body { font-family: var(--font-sans); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+
+  /* ── LAYOUT ── */
+  .app { display: grid; grid-template-rows: 49px 1fr; height: 100vh; }
+  .app-body { display: grid; grid-template-columns: 180px 1fr 260px; overflow: hidden; }
+
+  @media (max-width: 900px) {
+    .app-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+    .sidebar { flex-direction: row; overflow-x: auto; padding: 6px; }
+    .nav-section { display: none; }
+    .nav-item { flex-shrink: 0; border-left: none; border-bottom: 2px solid transparent; }
+    .nav-item.active { border-left-color: transparent; border-bottom-color: var(--blue); }
+    .right-panel { border-left: none; border-top: 0.5px solid var(--border-light); max-height: 220px; }
   }
-  .pad button:active, .pad button.active { background: #1d4ed8; transform: scale(0.96); }
-  .pad button.stop { background: #dc2626; }
-  .pad button.stop:active { background: #b91c1c; }
-  .pad .empty { background: transparent; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; gap: 8px;
+    background: var(--bg-primary);
+    border-bottom: 0.5px solid var(--border-light);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse 2.5s infinite; }
+  .dot.err { background: var(--red); }
+  .dot.wait { background: var(--amber); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .device-name { font-size: 14px; font-weight: 500; }
+  .device-sub { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .pill {
+    font-size: 11px; font-family: var(--font-mono);
+    padding: 3px 9px; border-radius: 99px;
+    border: 0.5px solid var(--border-light);
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pill.ok { background: var(--green-bg); color: var(--green-text); border-color: transparent; }
+  .pill.warn { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; }
+  .pill.err { background: var(--red-bg); color: var(--red-text); border-color: transparent; }
+  #clock { font-family: var(--font-mono); font-size: 12px; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    background: var(--bg-primary);
+    border-right: 0.5px solid var(--border-light);
+    padding: 12px 0;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .nav-section {
+    font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--text-tertiary); font-family: var(--font-mono);
+    padding: 10px 16px 4px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 16px; cursor: pointer;
+    border-left: 2px solid transparent;
+    font-size: 13px; color: var(--text-secondary);
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+  .nav-item.active { border-left-color: var(--blue); background: var(--blue-bg); color: var(--blue-text); }
+  .nav-item i { font-size: 16px; width: 18px; flex-shrink: 0; }
+
+  /* ── MAIN CONTENT ── */
+  .content { overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; }
+
+  .section-label {
+    font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px;
+  }
+
+  /* ── SENSOR GRID ── */
+  .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+
+  .sensor-card {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    position: relative; overflow: hidden;
+  }
+  .sensor-card::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+  .sensor-card.temp::before  { background: var(--amber); }
+  .sensor-card.hum::before   { background: var(--blue); }
+  .sensor-card.battv::before { background: var(--red); }
+  .sensor-card.batts::before { background: var(--green); }
+  .sensor-card.motor::before { background: #7f77dd; }
+
+  .sensor-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .sensor-name { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 5px; }
+  .sensor-chip { font-size: 9px; padding: 1px 6px; border-radius: 99px; background: var(--bg-secondary); color: var(--text-tertiary); font-family: var(--font-mono); }
+  .sensor-val { font-size: 28px; font-weight: 500; font-family: var(--font-mono); color: var(--text-primary); line-height: 1; }
+  .sensor-unit { font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+  .sensor-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; font-family: var(--font-mono); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; flex-shrink: 0; }
+
+  .batt-bar { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .batt-fill { height: 100%; border-radius: 2px; transition: width 0.6s; background: var(--green); }
+
+  /* ── CHART ── */
+  .chart-card {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+  }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .chart-title { font-size: 13px; font-weight: 500; }
+  .chart-meta { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
+
+  /* ── CONTROL TAB ── */
+  .ctrl-card {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+  }
 
   .camera {
-    max-width: 600px; margin-bottom: 16px;
-    border-radius: 10px; overflow: hidden; background: #1c1f26;
+    border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-secondary);
+    border: 0.5px solid var(--border-light);
   }
   .camera canvas { display: block; width: 100%; }
 
-  .compass {
-    max-width: 600px; margin-bottom: 16px;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(3, 76px);
+    grid-template-rows: repeat(3, 76px);
+    gap: 8px; margin: 14px auto 0;
   }
+  .pad button {
+    font-size: 1.6rem; border: none; border-radius: 12px;
+    background: var(--blue); color: #fff; cursor: pointer;
+    user-select: none; touch-action: manipulation;
+  }
+  .pad button:active, .pad button.active { background: #0c447c; transform: scale(0.96); }
+  .pad button.stop { background: var(--red); }
+  .pad button.stop:active { background: #a8421f; }
+  .pad .empty { background: transparent; }
+
+  /* ── RIGHT PANEL / LOG ── */
+  .right-panel {
+    background: var(--bg-primary);
+    border-left: 0.5px solid var(--border-light);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .panel-block { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+  .log-box {
+    border: 0.5px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    padding: 8px 10px;
+    overflow-y: auto;
+  }
+  .log-line { font-size: 10px; font-family: var(--font-mono); line-height: 1.9; color: var(--text-secondary); }
+  .log-line.ok { color: var(--green-text); }
+  .log-line.info { color: var(--blue-text); }
+  .log-line.err { color: var(--red-text); }
+  .log-time { color: var(--text-tertiary); margin-right: 6px; }
+
+  /* ── COMPASS (Hướng - GY-521) ── */
+  .sensor-card.heading::before { background: var(--blue); }
   .compass-dial {
-    width: 120px; height: 120px; border-radius: 50%;
-    background: #1c1f26; border: 2px solid #2a2e38;
-    position: relative;
+    width: 90px; height: 90px; border-radius: 50%;
+    background: var(--bg-secondary); border: 0.5px solid var(--border-light);
+    position: relative; margin: 6px auto;
   }
   .compass-tick {
-    position: absolute; font-size: 0.75rem; color: #999;
+    position: absolute; font-size: 0.65rem; color: var(--text-tertiary);
     transform: translate(-50%, -50%);
   }
-  .compass-tick.n { top: 10px; left: 50%; color: #f44336; }
-  .compass-tick.s { bottom: 10px; left: 50%; top: auto; }
-  .compass-tick.e { top: 50%; right: 10px; left: auto; }
-  .compass-tick.w { top: 50%; left: 10px; }
+  .compass-tick.n { top: 8px; left: 50%; color: var(--red); }
+  .compass-tick.s { bottom: 8px; left: 50%; top: auto; }
+  .compass-tick.e { top: 50%; right: 8px; left: auto; }
+  .compass-tick.w { top: 50%; left: 8px; }
   .compass-needle {
     position: absolute; top: 50%; left: 50%;
-    width: 4px; height: 46px;
-    background: linear-gradient(to top, #2563eb 50%, #f44336 50%);
+    width: 3px; height: 34px;
+    background: linear-gradient(to top, var(--blue) 50%, var(--red) 50%);
     transform-origin: 50% 50%;
     transform: translate(-50%, -100%) rotate(0deg);
     border-radius: 2px;
     transition: transform 0.4s ease;
   }
   .compass-value {
-    font-size: 1.1rem; font-weight: bold; font-family: monospace;
+    font-size: 1rem; font-weight: 500; font-family: var(--font-mono);
+    color: var(--text-primary); text-align: center;
   }
 </style>
 </head>
 <body>
-  <h1>IMIC Robot Dashboard</h1>
-  <div id="status" class="status wait">Đang kết nối tới AWS IoT...</div>
+<div class="app">
 
-  <div class="grid">
-    <div class="card"><div class="label">Nhiệt độ</div><div class="value" id="val-temp">--</div></div>
-    <div class="card"><div class="label">Độ ẩm</div><div class="value" id="val-hum">--</div></div>
-    <div class="card"><div class="label">Pin (V)</div><div class="value" id="val-batt">--</div></div>
-    <div class="card"><div class="label">Pin (%)</div><div class="value" id="val-soc">--</div></div>
-    <div class="card"><div class="label">Trạng thái</div><div class="value" id="val-motor">--</div></div>
-  </div>
-
-  <div class="compass">
-    <div class="compass-dial">
-      <span class="compass-tick n">N</span>
-      <span class="compass-tick e">E</span>
-      <span class="compass-tick s">S</span>
-      <span class="compass-tick w">W</span>
-      <div class="compass-needle" id="compass-needle"></div>
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="dot wait" id="status-dot"></div>
+      <div>
+        <div class="device-name">IMIC Robot Dashboard</div>
+        <div class="device-sub" id="status-text">Đang kết nối tới AWS IoT...</div>
+      </div>
     </div>
-    <div class="compass-value" id="val-heading">--°</div>
+    <div class="topbar-right">
+      <span class="pill warn" id="batt-pill"><i class="ti ti-battery-2" style="font-size:12px"></i> --%</span>
+      <span class="pill" id="clock">--:--:--</span>
+    </div>
   </div>
 
-  <div class="camera">
-    <canvas id="cam-stream"></canvas>
+  <div class="app-body">
+
+    <nav class="sidebar">
+      <div class="nav-section">Monitor</div>
+      <div class="nav-item active" onclick="showTab('overview',this)">
+        <i class="ti ti-layout-dashboard"></i> Overview
+      </div>
+      <div class="nav-item" onclick="showTab('telemetry',this)">
+        <i class="ti ti-chart-line"></i> Telemetry
+      </div>
+      <div class="nav-section">Control</div>
+      <div class="nav-item" onclick="showTab('control',this)">
+        <i class="ti ti-camera"></i> Camera &amp; Motor
+      </div>
+      <div class="nav-section">System</div>
+      <div class="nav-item" onclick="showTab('log',this)">
+        <i class="ti ti-terminal-2"></i> System Log
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <div id="tab-overview">
+        <div class="section-label">Sensor readings — I²C bus</div>
+        <div class="sensor-grid">
+
+          <div class="sensor-card temp">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-temperature" style="font-size:14px"></i> Nhiệt độ
+                <span class="sensor-chip">HTU21D</span>
+              </div>
+              <div class="live-dot"></div>
+            </div>
+            <div class="sensor-val" id="txt-temp">--<span class="sensor-unit">°C</span></div>
+          </div>
+
+          <div class="sensor-card hum">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-droplet" style="font-size:14px"></i> Độ ẩm
+                <span class="sensor-chip">HTU21D</span>
+              </div>
+              <div class="live-dot"></div>
+            </div>
+            <div class="sensor-val" id="txt-hum">--<span class="sensor-unit">%</span></div>
+          </div>
+
+          <div class="sensor-card battv">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-bolt" style="font-size:14px"></i> Pin
+                <span class="sensor-chip">MAX17043</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-battv">--<span class="sensor-unit">V</span></div>
+          </div>
+
+          <div class="sensor-card batts">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-battery-charging" style="font-size:14px"></i> Dung lượng
+                <span class="sensor-chip">MAX17043</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-batts">--<span class="sensor-unit">%</span></div>
+            <div class="batt-bar"><div class="batt-fill" id="batt-fill" style="width:0%"></div></div>
+          </div>
+
+          <div class="sensor-card motor">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-steering-wheel" style="font-size:14px"></i> Trạng thái
+                <span class="sensor-chip">MOTOR</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-motor" style="font-size:20px">--</div>
+          </div>
+
+          <div class="sensor-card heading">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-compass" style="font-size:14px"></i> Hướng
+                <span class="sensor-chip">GY-521</span>
+              </div>
+            </div>
+            <div class="compass-dial">
+              <span class="compass-tick n">N</span>
+              <span class="compass-tick e">E</span>
+              <span class="compass-tick s">S</span>
+              <span class="compass-tick w">W</span>
+              <div class="compass-needle" id="compass-needle"></div>
+            </div>
+            <div class="compass-value" id="val-heading">--°</div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="tab-telemetry" style="display:none">
+        <div class="section-label">Lịch sử telemetry — 15 điểm gần nhất</div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Nhiệt độ &amp; Độ ẩm</span>
+            <span class="chart-meta" id="chart-updated">cập nhật lúc --:--:--</span>
+          </div>
+          <canvas id="telemetryChart" height="100"></canvas>
+        </div>
+      </div>
+
+      <div id="tab-control" style="display:none">
+        <div class="section-label">Camera trực tiếp</div>
+        <div class="camera">
+          <canvas id="cam-stream"></canvas>
+        </div>
+
+        <div class="section-label" style="margin-top:18px">Điều khiển motor</div>
+        <div class="ctrl-card">
+          <div class="pad">
+            <div class="empty"></div>
+            <button data-cmd="1">▲</button>
+            <div class="empty"></div>
+
+            <button data-cmd="3">◀</button>
+            <button class="stop" data-cmd="6">■</button>
+            <button data-cmd="4">▶</button>
+
+            <div class="empty"></div>
+            <button data-cmd="2">▼</button>
+            <div class="empty"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-log" style="display:none">
+        <div class="section-label">System log — MQTT / AWS IoT</div>
+        <div class="ctrl-card" style="gap:0">
+          <div class="log-box" id="logbox" style="max-height:400px">
+            <div class="log-line ok"><span class="log-time">--:--:--</span>Hệ thống sẵn sàng</div>
+          </div>
+          <button class="btn" style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:0.5px solid var(--border-mid); background:var(--bg-primary); color:var(--text-primary); cursor:pointer; font-family:var(--font-sans);" onclick="document.getElementById('logbox').innerHTML=''; document.getElementById('logbox-side').innerHTML=''">
+            <i class="ti ti-trash"></i> Xóa log
+          </button>
+        </div>
+      </div>
+
+    </main>
+
+    <aside class="right-panel">
+      <div class="panel-block">
+        <div class="section-label">Log gần đây</div>
+        <div class="log-box" id="logbox-side" style="height:100%; max-height: calc(100vh - 100px)">
+          <div class="log-line ok"><span class="log-time">--:--</span>Hệ thống sẵn sàng</div>
+        </div>
+      </div>
+    </aside>
   </div>
+</div>
 
-  <div class="pad">
-    <div class="empty"></div>
-    <button data-cmd="1">▲</button>
-    <div class="empty"></div>
+<!-- AWS SDK v2 + aws-iot-device-sdk browser bundle (kết nối MQTT qua WebSocket bằng IAM/Cognito) -->
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1500.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.js"></script>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-    <button data-cmd="3">◀</button>
-    <button class="stop" data-cmd="6">■</button>
-    <button data-cmd="4">▶</button>
+<script>
+  /* ======== CẤU HÌNH — chỉnh theo AWS account của bạn ======== */
+  const AWS_REGION        = "ap-southeast-2";
+  const AWS_IOT_ENDPOINT  = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
+  const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:a3d49410-6887-4f7b-a3f5-a16c27eda9e6";
 
-    <div class="empty"></div>
-    <button data-cmd="2">▼</button>
-    <div class="empty"></div>
-  </div>
+  const TOPIC_DATA = "imic-esp32/data";
+  const TOPIC_CMD  = "imic-esp32/cmd";
 
-  <!-- AWS SDK v2 + aws-iot-device-sdk browser bundle (kết nối MQTT qua WebSocket bằng IAM/Cognito) -->
-  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1500.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.js"></script>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  /* Proxy serverless (Vercel) lấy snapshot.jpg từ Pi qua Cloudflare Tunnel */
+  const CAMERA_SNAPSHOT_URL = "/api/camera";
+  /* ============================================================= */
 
-  <script>
-    /* ======== CẤU HÌNH — chỉnh theo AWS account của bạn ======== */
-    const AWS_REGION        = "ap-southeast-2";
-    const AWS_IOT_ENDPOINT  = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
-    const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:a3d49410-6887-4f7b-a3f5-a16c27eda9e6";
+  // ── CLOCK ──
+  function tick() {
+    document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8);
+  }
+  setInterval(tick, 1000); tick();
 
-    const TOPIC_DATA = "imic-esp32/data";
-    const TOPIC_CMD  = "imic-esp32/cmd";
+  // ── TAB NAVIGATION ──
+  const tabs = ['overview','telemetry','control','log'];
+  function showTab(name, el) {
+    tabs.forEach(t => {
+      document.getElementById('tab-'+t).style.display = t===name ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (el) el.classList.add('active');
+  }
 
-    /* Proxy serverless (Vercel) lấy snapshot.jpg từ Pi qua ngrok, kèm header
-     * ngrok-skip-browser-warning -> tránh trang cảnh báo của ngrok free và
-     * tránh CORS, hoạt động trên mọi trình duyệt kể cả Safari/iOS */
-    const CAMERA_SNAPSHOT_URL = "/api/camera";
-    /* ============================================================= */
+  // ── CAMERA: poll ảnh JPEG liên tục, vẽ lên canvas ──
+  function startCameraPolling(url, canvas, intervalMs = 1500) {
+    const ctx = canvas.getContext("2d");
 
-    /* ─── Poll ảnh JPEG liên tục, vẽ lên canvas (thay cho MJPEG stream) ─── */
-    function startCameraPolling(url, canvas, intervalMs = 1500) {
-      const ctx = canvas.getContext("2d");
-
-      async function tick() {
-        try {
-          const res = await fetch(url + "?t=" + Date.now());
-          if (res.ok) {
-            const blob = await res.blob();
-            const bitmap = await createImageBitmap(blob);
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            ctx.drawImage(bitmap, 0, 0);
-            bitmap.close();
-          }
-        } catch (e) {
-          console.error("Camera snapshot error", e);
-        } finally {
-          setTimeout(tick, intervalMs);
+    async function loop() {
+      try {
+        const res = await fetch(url + "?t=" + Date.now());
+        if (res.ok) {
+          const blob = await res.blob();
+          const bitmap = await createImageBitmap(blob);
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
         }
+      } catch (e) {
+        console.error("Camera snapshot error", e);
+      } finally {
+        setTimeout(loop, intervalMs);
       }
-
-      tick();
     }
 
-    startCameraPolling(CAMERA_SNAPSHOT_URL, document.getElementById("cam-stream"));
+    loop();
+  }
+  startCameraPolling(CAMERA_SNAPSHOT_URL, document.getElementById("cam-stream"));
 
-    const motorNames = {
-      0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
-      3: "LEFT", 4: "RIGHT", 5: "RUN", 6: "STOP",
+  // ── LOG ──
+  function addLog(type, txt) {
+    const t = new Date().toTimeString().slice(0,8);
+    ['logbox','logbox-side'].forEach(id => {
+      const box = document.getElementById(id);
+      if (!box) return;
+      const line = document.createElement('div');
+      line.className = 'log-line ' + type;
+      line.innerHTML = `<span class="log-time">${t}</span>${txt}`;
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+      while (box.children.length > 60) box.removeChild(box.firstChild);
+    });
+  }
+
+  // ── STATUS PILL/DOT ──
+  const statusDot  = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  function setStatus(text, kind) {
+    statusText.textContent = text;
+    statusDot.className = 'dot ' + (kind === 'ok' ? '' : kind);
+  }
+
+  const motorNames = {
+    0: "STOPPED", 1: "FORWARD", 2: "BACKWARD",
+    3: "LEFT", 4: "RIGHT", 5: "RUN", 6: "STOP",
+  };
+
+  // ── TELEMETRY CHART (lịch sử 15 điểm gần nhất, build từ MQTT) ──
+  const telChart = new Chart(document.getElementById('telemetryChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Nhiệt độ (°C)', borderColor: '#ef9f27', backgroundColor: 'rgba(239,159,39,0.07)', data: [], tension: 0.4, fill: true, pointRadius: 3 },
+        { label: 'Độ ẩm (%)',    borderColor: '#378add', backgroundColor: 'rgba(55,138,221,0.07)', data: [], tension: 0.4, fill: true, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { family: 'IBM Plex Mono', size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } },
+        y: { beginAtZero: false, ticks: { font: { family: 'IBM Plex Mono', size: 10 }, color: '#9b9b96' }, grid: { color: 'rgba(0,0,0,0.04)' } }
+      }
+    }
+  });
+
+  function pushTelemetryPoint(temp, hum) {
+    const label = new Date().toTimeString().slice(0,8);
+    telChart.data.labels.push(label);
+    telChart.data.datasets[0].data.push(temp);
+    telChart.data.datasets[1].data.push(hum);
+    if (telChart.data.labels.length > 15) {
+      telChart.data.labels.shift();
+      telChart.data.datasets[0].data.shift();
+      telChart.data.datasets[1].data.shift();
+    }
+    telChart.update();
+    document.getElementById('chart-updated').textContent = 'cập nhật lúc ' + label;
+  }
+
+  // ── AWS IoT MQTT-over-WebSocket (Cognito) ──
+  AWS.config.region = AWS_REGION;
+  AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+    IdentityPoolId: COGNITO_IDENTITY_POOL_ID,
+  });
+
+  let client;
+
+  /* Ký SigV4 cho kết nối MQTT-over-WebSocket tới AWS IoT Core
+   * Tham khảo: https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html#mqtt-ws */
+  function getSignatureKey(key, dateStamp, regionName, serviceName) {
+    const kDate    = CryptoJS.HmacSHA256(dateStamp, "AWS4" + key);
+    const kRegion  = CryptoJS.HmacSHA256(regionName, kDate);
+    const kService = CryptoJS.HmacSHA256(serviceName, kRegion);
+    return CryptoJS.HmacSHA256("aws4_request", kService);
+  }
+
+  function getSignedWssUrl(host, region, creds) {
+    const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+    const date     = datetime.substring(0, 8);
+    const service  = "iotdevicegateway";
+    const algorithm = "AWS4-HMAC-SHA256";
+
+    const credentialScope = `${date}/${region}/${service}/aws4_request`;
+    const canonicalQuerystring =
+      `X-Amz-Algorithm=${algorithm}` +
+      `&X-Amz-Credential=${encodeURIComponent(creds.accessKeyId + "/" + credentialScope)}` +
+      `&X-Amz-Date=${datetime}` +
+      `&X-Amz-SignedHeaders=host`;
+
+    const canonicalHeaders = `host:${host}\n`;
+    const payloadHash = CryptoJS.SHA256("").toString(CryptoJS.enc.Hex);
+    const canonicalRequest = `GET\n/mqtt\n${canonicalQuerystring}\n${canonicalHeaders}\nhost\n${payloadHash}`;
+
+    const stringToSign =
+      `${algorithm}\n${datetime}\n${credentialScope}\n` +
+      CryptoJS.SHA256(canonicalRequest).toString(CryptoJS.enc.Hex);
+
+    const signingKey = getSignatureKey(creds.secretAccessKey, date, region, service);
+    const signature  = CryptoJS.HmacSHA256(stringToSign, signingKey).toString(CryptoJS.enc.Hex);
+
+    let url = `wss://${host}/mqtt?${canonicalQuerystring}&X-Amz-Signature=${signature}`;
+    if (creds.sessionToken) {
+      url += `&X-Amz-Security-Token=${encodeURIComponent(creds.sessionToken)}`;
+    }
+    return url;
+  }
+
+  AWS.config.credentials.get((err) => {
+    if (err) {
+      setStatus("Lỗi lấy credentials Cognito: " + err.message, "err");
+      addLog('err', 'Cognito error: ' + err.message);
+      return;
+    }
+
+    const creds = {
+      accessKeyId:     AWS.config.credentials.accessKeyId,
+      secretAccessKey: AWS.config.credentials.secretAccessKey,
+      sessionToken:    AWS.config.credentials.sessionToken,
     };
 
-    const statusEl = document.getElementById("status");
+    const url = getSignedWssUrl(AWS_IOT_ENDPOINT, AWS_REGION, creds);
 
-    function setStatus(text, cls) {
-      statusEl.textContent = text;
-      statusEl.className = "status " + cls;
-    }
-
-    AWS.config.region = AWS_REGION;
-    AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-      IdentityPoolId: COGNITO_IDENTITY_POOL_ID,
+    client = mqtt.connect(url, {
+      clientId: "dashboard-" + Math.floor(Math.random() * 100000),
+      protocolVersion: 4,
+      reconnectPeriod: 4000,
     });
 
-    let client;
+    client.on("connect", () => {
+      setStatus("Đã kết nối AWS IoT", "ok");
+      client.subscribe(TOPIC_DATA);
+      addLog('ok', 'MQTT connected');
+    });
 
-    /* ─── Ký SigV4 cho kết nối MQTT-over-WebSocket tới AWS IoT Core ───
-     * Tham khảo: https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html#mqtt-ws */
-    function getSignatureKey(key, dateStamp, regionName, serviceName) {
-      const kDate    = CryptoJS.HmacSHA256(dateStamp, "AWS4" + key);
-      const kRegion  = CryptoJS.HmacSHA256(regionName, kDate);
-      const kService = CryptoJS.HmacSHA256(serviceName, kRegion);
-      return CryptoJS.HmacSHA256("aws4_request", kService);
-    }
+    client.on("close",     () => { setStatus("Mất kết nối, đang thử lại...", "err"); addLog('err', 'MQTT disconnected'); });
+    client.on("reconnect", () => { setStatus("Đang kết nối lại...", "wait"); addLog('info', 'MQTT reconnecting...'); });
+    client.on("error", (e) => { setStatus("Lỗi: " + e.message, "err"); addLog('err', 'MQTT error: ' + e.message); });
 
-    function getSignedWssUrl(host, region, creds) {
-      const datetime = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
-      const date     = datetime.substring(0, 8);
-      const service  = "iotdevicegateway";
-      const algorithm = "AWS4-HMAC-SHA256";
+    client.on("message", (topic, payload) => {
+      if (topic !== TOPIC_DATA) return;
+      try {
+        const d = JSON.parse(payload.toString());
 
-      const credentialScope = `${date}/${region}/${service}/aws4_request`;
-      const canonicalQuerystring =
-        `X-Amz-Algorithm=${algorithm}` +
-        `&X-Amz-Credential=${encodeURIComponent(creds.accessKeyId + "/" + credentialScope)}` +
-        `&X-Amz-Date=${datetime}` +
-        `&X-Amz-SignedHeaders=host`;
+        const temp = d.temperature     > -900 ? d.temperature     : null;
+        const hum  = d.humidity        > -900 ? d.humidity        : null;
+        const bv   = d.battery_voltage > -900 ? d.battery_voltage : null;
+        const soc  = d.battery_soc     > -900 ? d.battery_soc     : null;
 
-      const canonicalHeaders = `host:${host}\n`;
-      const payloadHash = CryptoJS.SHA256("").toString(CryptoJS.enc.Hex);
-      const canonicalRequest = `GET\n/mqtt\n${canonicalQuerystring}\n${canonicalHeaders}\nhost\n${payloadHash}`;
+        document.getElementById('txt-temp').innerHTML  = temp !== null ? temp.toFixed(1) + '<span class="sensor-unit">°C</span>' : '--';
+        document.getElementById('txt-hum').innerHTML   = hum  !== null ? hum.toFixed(1)  + '<span class="sensor-unit">%</span>'  : '--';
+        document.getElementById('txt-battv').innerHTML = bv   !== null ? bv.toFixed(2)   + '<span class="sensor-unit">V</span>'  : '--';
+        document.getElementById('txt-batts').innerHTML = soc  !== null ? soc.toFixed(1)  + '<span class="sensor-unit">%</span>'  : '--';
+        document.getElementById('txt-motor').textContent = motorNames[d.motor_state] ?? d.motor_state;
 
-      const stringToSign =
-        `${algorithm}\n${datetime}\n${credentialScope}\n` +
-        CryptoJS.SHA256(canonicalRequest).toString(CryptoJS.enc.Hex);
+        if (soc !== null) {
+          const fill = document.getElementById('batt-fill');
+          fill.style.width = Math.round(soc) + '%';
+          fill.style.background = soc > 50 ? 'var(--green)' : soc > 20 ? 'var(--amber)' : 'var(--red)';
 
-      const signingKey = getSignatureKey(creds.secretAccessKey, date, region, service);
-      const signature  = CryptoJS.HmacSHA256(stringToSign, signingKey).toString(CryptoJS.enc.Hex);
-
-      let url = `wss://${host}/mqtt?${canonicalQuerystring}&X-Amz-Signature=${signature}`;
-      if (creds.sessionToken) {
-        url += `&X-Amz-Security-Token=${encodeURIComponent(creds.sessionToken)}`;
-      }
-      return url;
-    }
-
-    AWS.config.credentials.get((err) => {
-      if (err) {
-        setStatus("Lỗi lấy credentials Cognito: " + err.message, "err");
-        return;
-      }
-
-      const creds = {
-        accessKeyId:     AWS.config.credentials.accessKeyId,
-        secretAccessKey: AWS.config.credentials.secretAccessKey,
-        sessionToken:    AWS.config.credentials.sessionToken,
-      };
-
-      const url = getSignedWssUrl(AWS_IOT_ENDPOINT, AWS_REGION, creds);
-
-      client = mqtt.connect(url, {
-        clientId: "dashboard-" + Math.floor(Math.random() * 100000),
-        protocolVersion: 4,
-        reconnectPeriod: 4000,
-      });
-
-      client.on("connect", () => {
-        setStatus("Đã kết nối AWS IoT", "ok");
-        client.subscribe(TOPIC_DATA);
-      });
-
-      client.on("close",       () => setStatus("Mất kết nối, đang thử lại...", "err"));
-      client.on("reconnect",   () => setStatus("Đang kết nối lại...", "wait"));
-      client.on("error", (e)   => setStatus("Lỗi: " + e.message, "err"));
-
-      client.on("message", (topic, payload) => {
-        if (topic !== TOPIC_DATA) return;
-        try {
-          const d = JSON.parse(payload.toString());
-          document.getElementById("val-temp").textContent  = d.temperature  > -900 ? d.temperature.toFixed(1) + " °C" : "--";
-          document.getElementById("val-hum").textContent   = d.humidity     > -900 ? d.humidity.toFixed(1)    + " %"  : "--";
-          document.getElementById("val-batt").textContent  = d.battery_voltage > -900 ? d.battery_voltage.toFixed(2) + " V" : "--";
-          document.getElementById("val-soc").textContent   = d.battery_soc  > -900 ? d.battery_soc.toFixed(1) + " %"  : "--";
-          document.getElementById("val-motor").textContent = motorNames[d.motor_state] ?? d.motor_state;
-
-          if (typeof d.heading === "number") {
-            document.getElementById("val-heading").textContent = d.heading.toFixed(0) + "°";
-            document.getElementById("compass-needle").style.transform =
-              "translate(-50%, -100%) rotate(" + d.heading + "deg)";
-          }
-        } catch (e) {
-          console.error("Bad payload", e);
+          const battPill = document.getElementById('batt-pill');
+          battPill.innerHTML = '<i class="ti ti-battery-2" style="font-size:12px"></i> ' + Math.round(soc) + '%';
+          battPill.className = 'pill ' + (soc > 50 ? 'ok' : soc > 20 ? 'warn' : 'err');
         }
-      });
+
+        if (typeof d.heading === "number") {
+          document.getElementById('val-heading').textContent = d.heading.toFixed(0) + '°';
+          document.getElementById('compass-needle').style.transform =
+            'translate(-50%, -100%) rotate(' + d.heading + 'deg)';
+        }
+
+        if (temp !== null && hum !== null) {
+          pushTelemetryPoint(temp, hum);
+        }
+
+        addLog('', `Temp:${temp ?? '--'}°C Hum:${hum ?? '--'}% Batt:${bv ?? '--'}V Motor:${motorNames[d.motor_state] ?? d.motor_state}`);
+      } catch (e) {
+        console.error("Bad payload", e);
+        addLog('err', 'Bad payload: ' + e.message);
+      }
     });
+  });
 
-    function sendCmd(cmd) {
-      if (!client) return;
-      client.publish(TOPIC_CMD, JSON.stringify({ cmd: cmd }));
-    }
+  function sendCmd(cmd) {
+    if (!client) return;
+    client.publish(TOPIC_CMD, JSON.stringify({ cmd: cmd }));
+  }
 
-    /* Hold-to-run: nhấn giữ -> gửi lệnh, nhả ra -> gửi STOP (trừ nút STOP) */
-    document.querySelectorAll(".pad button").forEach((btn) => {
-      const cmd = parseInt(btn.dataset.cmd, 10);
-      const isStop = cmd === 6;
+  /* Hold-to-run: nhấn giữ -> gửi lệnh, nhả ra -> gửi STOP (trừ nút STOP) */
+  document.querySelectorAll(".pad button").forEach((btn) => {
+    const cmd = parseInt(btn.dataset.cmd, 10);
+    const isStop = cmd === 6;
 
-      const press = (e) => {
-        e.preventDefault();
-        btn.classList.add("active");
-        sendCmd(cmd);
-      };
-      const release = (e) => {
-        e.preventDefault();
-        btn.classList.remove("active");
-        if (!isStop) sendCmd(6); // STOP khi nhả nút
-      };
+    const press = (e) => {
+      e.preventDefault();
+      btn.classList.add("active");
+      sendCmd(cmd);
+    };
+    const release = (e) => {
+      e.preventDefault();
+      btn.classList.remove("active");
+      if (!isStop) sendCmd(6); // STOP khi nhả nút
+    };
 
-      btn.addEventListener("pointerdown", press);
-      btn.addEventListener("pointerup", release);
-      btn.addEventListener("pointerleave", release);
-      btn.addEventListener("pointercancel", release);
-    });
-  </script>
+    btn.addEventListener("pointerdown", press);
+    btn.addEventListener("pointerup", release);
+    btn.addEventListener("pointerleave", release);
+    btn.addEventListener("pointercancel", release);
+  });
+</script>
 </body>
 </html>
