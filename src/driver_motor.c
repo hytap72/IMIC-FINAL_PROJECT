@@ -21,6 +21,11 @@ static const char *TAG = "DRIVER_MOTOR";
 #define RAMP_INTERVAL_MS  20
 #define RAMP_STEP         8
 
+/* Duty khởi động tối thiểu: khi bắt đầu chạy từ 0, nhảy ngay lên mức này
+ * trước khi ramp tiếp, để vượt qua lực ma sát tĩnh của động cơ -> nhấn
+ * nhanh vẫn làm xe chạy được, không bị "không chạy" như khi ramp từ 0 */
+#define MIN_START_DUTY    100
+
 static const ledc_channel_t s_channels[4] = {
     LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3
 };
@@ -106,10 +111,19 @@ motor_cmd_t driver_motor_get_state(void)
 
 static void set_targets(int in1, int in2, int in3, int in4)
 {
-    s_target_duty[0] = in1;
-    s_target_duty[1] = in2;
-    s_target_duty[2] = in3;
-    s_target_duty[3] = in4;
+    int targets[4] = { in1, in2, in3, in4 };
+
+    for (int i = 0; i < 4; i++) {
+        s_target_duty[i] = targets[i];
+
+        /* Nhảy ngay lên MIN_START_DUTY khi chuyển từ đứng yên sang chạy,
+         * để xe phản hồi ngay cả khi nhấn rất nhanh */
+        if (s_current_duty[i] == 0 && targets[i] > MIN_START_DUTY) {
+            s_current_duty[i] = MIN_START_DUTY;
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, s_channels[i], s_current_duty[i]);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, s_channels[i]);
+        }
+    }
 }
 
 void driver_motor_handle_cmd(motor_cmd_t cmd)

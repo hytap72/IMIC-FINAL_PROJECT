@@ -155,27 +155,6 @@
   .sensor-card.battv::before { background: var(--red); }
   .sensor-card.batts::before { background: var(--green); }
   .sensor-card.motor::before { background: #7f77dd; }
-  .sensor-card.heading::before { background: var(--blue); }
-
-  .compass-dial {
-    width: 64px; height: 64px; border-radius: 50%;
-    background: var(--bg-secondary); border: 1px solid var(--border-mid);
-    position: relative; margin: 4px auto 0;
-  }
-  .compass-tick { position: absolute; font-size: 9px; color: var(--text-tertiary); font-family: var(--font-mono); transform: translate(-50%, -50%); }
-  .compass-tick.n { top: 7px; left: 50%; color: var(--red); }
-  .compass-tick.s { bottom: 7px; left: 50%; top: auto; }
-  .compass-tick.e { top: 50%; right: 7px; left: auto; }
-  .compass-tick.w { top: 50%; left: 7px; }
-  .compass-needle {
-    position: absolute; top: 50%; left: 50%;
-    width: 3px; height: 24px;
-    background: linear-gradient(to top, var(--blue) 50%, var(--red) 50%);
-    transform-origin: 50% 50%;
-    transform: translate(-50%, -100%) rotate(0deg);
-    border-radius: 2px;
-    transition: transform 0.4s ease;
-  }
 
   .sensor-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .sensor-name { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 5px; }
@@ -250,6 +229,35 @@
   .log-line.info { color: var(--blue-text); }
   .log-line.err { color: var(--red-text); }
   .log-time { color: var(--text-tertiary); margin-right: 6px; }
+
+  /* ── COMPASS (Hướng - GY-521) ── */
+  .sensor-card.heading::before { background: var(--blue); }
+  .compass-dial {
+    width: 90px; height: 90px; border-radius: 50%;
+    background: var(--bg-secondary); border: 0.5px solid var(--border-light);
+    position: relative; margin: 6px auto;
+  }
+  .compass-tick {
+    position: absolute; font-size: 0.65rem; color: var(--text-tertiary);
+    transform: translate(-50%, -50%);
+  }
+  .compass-tick.n { top: 8px; left: 50%; color: var(--red); }
+  .compass-tick.s { bottom: 8px; left: 50%; top: auto; }
+  .compass-tick.e { top: 50%; right: 8px; left: auto; }
+  .compass-tick.w { top: 50%; left: 8px; }
+  .compass-needle {
+    position: absolute; top: 50%; left: 50%;
+    width: 3px; height: 34px;
+    background: linear-gradient(to top, var(--blue) 50%, var(--red) 50%);
+    transform-origin: 50% 50%;
+    transform: translate(-50%, -100%) rotate(0deg);
+    border-radius: 2px;
+    transition: transform 0.4s ease;
+  }
+  .compass-value {
+    font-size: 1rem; font-weight: 500; font-family: var(--font-mono);
+    color: var(--text-primary); text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -355,7 +363,6 @@
                 <span class="sensor-chip">GY-521</span>
               </div>
             </div>
-            <div class="sensor-val" id="txt-heading">--<span class="sensor-unit">°</span></div>
             <div class="compass-dial">
               <span class="compass-tick n">N</span>
               <span class="compass-tick e">E</span>
@@ -363,6 +370,7 @@
               <span class="compass-tick w">W</span>
               <div class="compass-needle" id="compass-needle"></div>
             </div>
+            <div class="compass-value" id="val-heading">--°</div>
           </div>
 
         </div>
@@ -645,12 +653,6 @@
         document.getElementById('txt-batts').innerHTML = soc  !== null ? soc.toFixed(1)  + '<span class="sensor-unit">%</span>'  : '--';
         document.getElementById('txt-motor').textContent = motorNames[d.motor_state] ?? d.motor_state;
 
-        if (typeof d.heading === "number") {
-          document.getElementById('txt-heading').innerHTML = d.heading.toFixed(0) + '<span class="sensor-unit">°</span>';
-          document.getElementById('compass-needle').style.transform =
-            'translate(-50%, -100%) rotate(' + d.heading + 'deg)';
-        }
-
         if (soc !== null) {
           const fill = document.getElementById('batt-fill');
           fill.style.width = Math.round(soc) + '%';
@@ -659,6 +661,12 @@
           const battPill = document.getElementById('batt-pill');
           battPill.innerHTML = '<i class="ti ti-battery-2" style="font-size:12px"></i> ' + Math.round(soc) + '%';
           battPill.className = 'pill ' + (soc > 50 ? 'ok' : soc > 20 ? 'warn' : 'err');
+        }
+
+        if (typeof d.heading === "number") {
+          document.getElementById('val-heading').textContent = d.heading.toFixed(0) + '°';
+          document.getElementById('compass-needle').style.transform =
+            'translate(-50%, -100%) rotate(' + d.heading + 'deg)';
         }
 
         if (temp !== null && hum !== null) {
