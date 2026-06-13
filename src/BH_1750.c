@@ -83,5 +83,5 @@ float bh1750_read_lux(bh1750_t *sensor)
     }
     sensor->lux_value = (float)raw_val / divisor;
 
-    return ESP_OK;
+    return sensor->lux_value;
 }
