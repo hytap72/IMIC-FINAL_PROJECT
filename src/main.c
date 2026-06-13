@@ -8,6 +8,7 @@
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
 #include "nvs_flash.h"
+#include "esp_ota_ops.h"
 #include <time.h>
 
 #include "i2c_bus.h"
@@ -139,6 +140,10 @@ static void sync_time(void)
 /* Gọi khi WiFi STA kết nối thành công (có IP) — khởi động các kết nối mạng */
 static void on_wifi_connected(void)
 {
+    /* WiFi/mạng hoạt động tốt -> xác nhận firmware hiện tại ổn định,
+     * tránh bị bootloader tự rollback về firmware cũ sau OTA */
+    esp_ota_mark_app_valid_cancel_rollback();
+
     sync_time();
     aws_iot_start();
     tcp_client_start();

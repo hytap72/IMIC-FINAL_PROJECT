@@ -3,6 +3,7 @@
 #include "net_config.h"
 #include "aws_certs.h"
 #include "driver_motor.h"
+#include "ota_manager.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -28,6 +29,13 @@ static void aws_iot_on_data(const char *topic, const char *data, int data_len)
         motor_cmd_t cmd = (motor_cmd_t)cmd_item->valueint;
         ESP_LOGI(TAG, "AWS IoT command: 0x%02X", cmd);
         driver_motor_handle_cmd(cmd);
+    }
+
+    /* Lệnh OTA: {"ota_url": "http://.../firmware.bin"} */
+    cJSON *ota_item = cJSON_GetObjectItem(root, "ota_url");
+    if (cJSON_IsString(ota_item) && ota_item->valuestring[0] != '\0') {
+        ESP_LOGI(TAG, "AWS IoT OTA command: %s", ota_item->valuestring);
+        ota_manager_start(ota_item->valuestring);
     }
 
     cJSON_Delete(root);
@@ -67,6 +75,8 @@ esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
     cJSON_AddNumberToObject(root, "battery_soc", battery_soc);
     cJSON_AddNumberToObject(root, "heading", heading);
     cJSON_AddNumberToObject(root, "motor_state", motor_state);
+    cJSON_AddStringToObject(root, "fw_version", ota_manager_get_version());
+    cJSON_AddBoolToObject(root, "ota_in_progress", ota_manager_is_in_progress());
 
     char *payload = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
