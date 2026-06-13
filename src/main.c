@@ -52,16 +52,69 @@ static volatile float s_gyro_z   = 0.0f;
  * theo thời gian do sai số tích lũy của gyroscope. */
 static volatile float s_heading  = 0.0f;
 
+/* Theo dõi lỗi liên tiếp của từng cảm biến I2C. Khi một cảm biến bị NACK
+ * (không có trên bus / mất kết nối) nhiều lần liên tiếp, tạm ngưng đọc
+ * cảm biến đó một số chu kỳ để tránh dồn lỗi/timeout trên bus mỗi 2s,
+ * điều này có thể chiếm nhiều thời gian giữ i2c_mutex và làm các task
+ * khác (WiFi/BLE) bị trễ -> rớt kết nối hoặc watchdog reset. */
+#define SENSOR_FAIL_THRESHOLD 3
+#define SENSOR_BACKOFF_CYCLES 10  /* ~20s ở chu kỳ 2s */
+
+typedef struct {
+    uint8_t fail_count;
+    uint8_t backoff;
+} sensor_health_t;
+
+static sensor_health_t hc_htu21d, hc_max17043, hc_bh1750;
+
+static bool sensor_should_skip(sensor_health_t *h)
+{
+    if (h->backoff > 0) {
+        h->backoff--;
+        return true;
+    }
+    return false;
+}
+
+static void sensor_mark_result(sensor_health_t *h, bool ok)
+{
+    if (ok) {
+        h->fail_count = 0;
+        h->backoff = 0;
+    } else if (h->fail_count < SENSOR_FAIL_THRESHOLD) {
+        h->fail_count++;
+        if (h->fail_count >= SENSOR_FAIL_THRESHOLD) {
+            h->backoff = SENSOR_BACKOFF_CYCLES;
+        }
+    }
+}
+
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
 {
     while (1) {
         if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            s_temp     = htu21d_get_temperature(&m_htu21d);
-            s_hum      = htu21d_get_humidity(&m_htu21d);
-            s_bat_volt = max17043_get_battery_voltage(&m_max17043);
-            s_bat_soc  = max17043_get_soc(&m_max17043);
-            s_lux      = bh1750_read_lux(&m_bh1750);
+            if (!sensor_should_skip(&hc_htu21d)) {
+                float temp = htu21d_get_temperature(&m_htu21d);
+                float hum  = htu21d_get_humidity(&m_htu21d);
+                sensor_mark_result(&hc_htu21d, temp > -900.0f && hum > -900.0f);
+                s_temp = temp;
+                s_hum  = hum;
+            }
+
+            if (!sensor_should_skip(&hc_max17043)) {
+                float bat_volt = max17043_get_battery_voltage(&m_max17043);
+                float bat_soc  = max17043_get_soc(&m_max17043);
+                sensor_mark_result(&hc_max17043, bat_volt > -900.0f && bat_soc > -900.0f);
+                s_bat_volt = bat_volt;
+                s_bat_soc  = bat_soc;
+            }
+
+            if (!sensor_should_skip(&hc_bh1750)) {
+                float lux = bh1750_read_lux(&m_bh1750);
+                sensor_mark_result(&hc_bh1750, lux > -900.0f);
+                s_lux = lux;
+            }
 
             if (mpu6050_read(&m_mpu6050) == ESP_OK) {
                 s_accel_x = m_mpu6050.accel_x;
