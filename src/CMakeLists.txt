@@ -3,6 +3,7 @@ set(SOURCES
     ../src/htu21d.c
     ../src/bh_1750.c
     ../src/max17043.c
+    ../src/mpu6050.c
     ../src/i2c_bus.c
     ../src/driver_motor.c
     ../src/ble_manager.c
