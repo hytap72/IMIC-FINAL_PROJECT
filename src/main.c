@@ -1,16 +1,18 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
 #include "nvs_flash.h"
-#include "driver/i2c_master.h"
 #include <time.h>
 
+#include "i2c_bus.h"
 #include "htu21d.h"
 #include "max17043.h"
+#include "bh_1750.h"
 #include "driver_motor.h"
 #include "ble_manager.h"
 #include "aws_iot.h"
@@ -20,29 +22,51 @@
 
 static const char *TAG = "MAIN";
 
-#if 0 /* TODO: bật lại khi có cảm biến HTU21D */
+#define SENSOR_SAMPLE_INTERVAL_MS 2000
+
+static htu21d_t   m_htu21d;
+static max17043_t m_max17043;
+static bh1750_t   m_bh1750;
+
+/* Bảo vệ truy cập I2C bus dùng chung giữa sensor_task và các nơi khác */
+static SemaphoreHandle_t i2c_mutex;
+
+/* Giá trị sensor mới nhất, cập nhật định kỳ bởi sensor_task */
+static volatile float s_temp     = -999.0f;
+static volatile float s_hum      = -999.0f;
+static volatile float s_bat_volt = -999.0f;
+static volatile float s_bat_soc  = -999.0f;
+static volatile float s_lux      = -999.0f;
+
+/* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
 {
     while (1) {
-        float temp = htu21d_get_temperature();
-        float hum  = htu21d_get_humidity();
-        ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%", temp, hum);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            s_temp     = htu21d_get_temperature(&m_htu21d);
+            s_hum      = htu21d_get_humidity(&m_htu21d);
+            s_bat_volt = max17043_get_battery_voltage(&m_max17043);
+            s_bat_soc  = max17043_get_soc(&m_max17043);
+            s_lux      = bh1750_read_lux(&m_bh1750);
+            xSemaphoreGive(i2c_mutex);
+        }
+
+        ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%, Batt: %.2f V (%.1f %%), Lux: %.2f",
+                 s_temp, s_hum, s_bat_volt, s_bat_soc, s_lux);
+
+        vTaskDelay(pdMS_TO_TICKS(SENSOR_SAMPLE_INTERVAL_MS));
     }
 }
-#endif
 
 /* Gửi telemetry (sensor + battery + trạng thái motor) định kỳ
  * lên AWS IoT (MQTT) và UDP server */
 static void telemetry_task(void *pvParameters)
 {
     while (1) {
-        /* TODO: dùng htu21d_get_temperature()/get_humidity() khi có cảm biến HTU21D */
-        float temp     = -999.0f;
-        float hum      = -999.0f;
-        /* TODO: dùng read_battery_voltage()/read_soc() khi có cảm biến MAX17043 */
-        float bat_volt = -999.0f;
-        float bat_soc  = -999.0f;
+        float temp     = s_temp;
+        float hum      = s_hum;
+        float bat_volt = s_bat_volt;
+        float bat_soc  = s_bat_soc;
         motor_cmd_t motor_state = driver_motor_get_state();
 
         if (aws_iot_is_connected()) {
@@ -97,11 +121,14 @@ void app_main(void)
 
     /* Tạo I2C bus dùng chung cho tất cả sensor */
     i2c_master_bus_handle_t i2c_bus;
-    i2c_master_init(&i2c_bus);
+    ESP_ERROR_CHECK(i2c_bus_init(&i2c_bus));
 
     /* Thêm các sensor vào bus */
-    /* TODO: bật lại khi có cảm biến MAX17043 */
-    // max17043_init(i2c_bus);
+    htu21d_init(i2c_bus, &m_htu21d);
+    max17043_init(i2c_bus, &m_max17043);
+    bh1750_init(i2c_bus, &m_bh1750);
+
+    i2c_mutex = xSemaphoreCreateMutex();
 
     driver_motor_init();
 
@@ -111,7 +138,5 @@ void app_main(void)
     /* Thử kết nối WiFi mặc định ngay khi khởi động (không cần BLE) */
     ble_manager_connect_wifi(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
 
-#if 0 /* TODO: bật lại khi có cảm biến HTU21D */
     xTaskCreate(sensor_task, "sensor_task", 4096, NULL, 5, NULL);
-#endif
 }

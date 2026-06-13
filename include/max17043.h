@@ -2,23 +2,25 @@
 #define MAX17043_H
 
 #include <stdint.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/i2c_master.h"
-#include "esp_err.h"
-#include "esp_log.h"
+#include "i2c_bus.h"
 
-#define I2C_SCL_PIN 22
-#define I2C_SDA_PIN 21
-#define I2C_MASTER_FREQ 100000
+
 #define MAX17043_ADDR 0x36
 #define REG_VCELL 0x02
 #define REG_SOC 0x04
 
-void max17043_init(i2c_master_bus_handle_t bus);
+typedef struct
+{
+    i2c_dev_t base;
+    float voltage;
+    float soc;
+} max17043_t;
 
-float read_battery_voltage(void);
 
-float read_soc(void);
+esp_err_t max17043_init(i2c_master_bus_handle_t bus_handle, max17043_t *sensor);
+
+float max17043_get_battery_voltage(max17043_t *sensor);
+
+float max17043_get_soc(max17043_t *sensor);
 
 #endif
