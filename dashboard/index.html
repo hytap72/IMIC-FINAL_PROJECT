@@ -155,6 +155,27 @@
   .sensor-card.battv::before { background: var(--red); }
   .sensor-card.batts::before { background: var(--green); }
   .sensor-card.motor::before { background: #7f77dd; }
+  .sensor-card.heading::before { background: var(--blue); }
+
+  .compass-dial {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--bg-secondary); border: 1px solid var(--border-mid);
+    position: relative; margin: 4px auto 0;
+  }
+  .compass-tick { position: absolute; font-size: 9px; color: var(--text-tertiary); font-family: var(--font-mono); transform: translate(-50%, -50%); }
+  .compass-tick.n { top: 7px; left: 50%; color: var(--red); }
+  .compass-tick.s { bottom: 7px; left: 50%; top: auto; }
+  .compass-tick.e { top: 50%; right: 7px; left: auto; }
+  .compass-tick.w { top: 50%; left: 7px; }
+  .compass-needle {
+    position: absolute; top: 50%; left: 50%;
+    width: 3px; height: 24px;
+    background: linear-gradient(to top, var(--blue) 50%, var(--red) 50%);
+    transform-origin: 50% 50%;
+    transform: translate(-50%, -100%) rotate(0deg);
+    border-radius: 2px;
+    transition: transform 0.4s ease;
+  }
 
   .sensor-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .sensor-name { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 5px; }
@@ -325,6 +346,23 @@
               </div>
             </div>
             <div class="sensor-val" id="txt-motor" style="font-size:20px">--</div>
+          </div>
+
+          <div class="sensor-card heading">
+            <div class="sensor-top">
+              <div class="sensor-name">
+                <i class="ti ti-compass" style="font-size:14px"></i> Hướng
+                <span class="sensor-chip">GY-521</span>
+              </div>
+            </div>
+            <div class="sensor-val" id="txt-heading">--<span class="sensor-unit">°</span></div>
+            <div class="compass-dial">
+              <span class="compass-tick n">N</span>
+              <span class="compass-tick e">E</span>
+              <span class="compass-tick s">S</span>
+              <span class="compass-tick w">W</span>
+              <div class="compass-needle" id="compass-needle"></div>
+            </div>
           </div>
 
         </div>
@@ -606,6 +644,12 @@
         document.getElementById('txt-battv').innerHTML = bv   !== null ? bv.toFixed(2)   + '<span class="sensor-unit">V</span>'  : '--';
         document.getElementById('txt-batts').innerHTML = soc  !== null ? soc.toFixed(1)  + '<span class="sensor-unit">%</span>'  : '--';
         document.getElementById('txt-motor').textContent = motorNames[d.motor_state] ?? d.motor_state;
+
+        if (typeof d.heading === "number") {
+          document.getElementById('txt-heading').innerHTML = d.heading.toFixed(0) + '<span class="sensor-unit">°</span>';
+          document.getElementById('compass-needle').style.transform =
+            'translate(-50%, -100%) rotate(' + d.heading + 'deg)';
+        }
 
         if (soc !== null) {
           const fill = document.getElementById('batt-fill');

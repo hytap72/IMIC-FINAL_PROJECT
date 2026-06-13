@@ -55,7 +55,7 @@ esp_err_t aws_iot_start(void)
 
 esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
                                      float battery_voltage, float battery_soc,
-                                     uint8_t motor_state)
+                                     float heading, uint8_t motor_state)
 {
     if (!mqtt_manager_is_connected()) return ESP_ERR_INVALID_STATE;
 
@@ -65,6 +65,7 @@ esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
     cJSON_AddNumberToObject(root, "humidity", humidity);
     cJSON_AddNumberToObject(root, "battery_voltage", battery_voltage);
     cJSON_AddNumberToObject(root, "battery_soc", battery_soc);
+    cJSON_AddNumberToObject(root, "heading", heading);
     cJSON_AddNumberToObject(root, "motor_state", motor_state);
 
     char *payload = cJSON_PrintUnformatted(root);

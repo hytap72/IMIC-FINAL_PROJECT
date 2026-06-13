@@ -13,7 +13,7 @@ esp_err_t aws_iot_start(void);
  * lên topic AWS_IOT_TOPIC_DATA */
 esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
                                      float battery_voltage, float battery_soc,
-                                     uint8_t motor_state);
+                                     float heading, uint8_t motor_state);
 
 bool aws_iot_is_connected(void);
 
