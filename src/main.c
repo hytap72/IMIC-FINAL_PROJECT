@@ -13,6 +13,7 @@
 #include "htu21d.h"
 #include "max17043.h"
 #include "bh_1750.h"
+#include "mpu6050.h"
 #include "driver_motor.h"
 #include "ble_manager.h"
 #include "aws_iot.h"
@@ -27,6 +28,7 @@ static const char *TAG = "MAIN";
 static htu21d_t   m_htu21d;
 static max17043_t m_max17043;
 static bh1750_t   m_bh1750;
+static mpu6050_t  m_mpu6050;
 
 /* Bảo vệ truy cập I2C bus dùng chung giữa sensor_task và các nơi khác */
 static SemaphoreHandle_t i2c_mutex;
@@ -37,6 +39,12 @@ static volatile float s_hum      = -999.0f;
 static volatile float s_bat_volt = -999.0f;
 static volatile float s_bat_soc  = -999.0f;
 static volatile float s_lux      = -999.0f;
+static volatile float s_accel_x  = 0.0f;
+static volatile float s_accel_y  = 0.0f;
+static volatile float s_accel_z  = 0.0f;
+static volatile float s_gyro_x   = 0.0f;
+static volatile float s_gyro_y   = 0.0f;
+static volatile float s_gyro_z   = 0.0f;
 
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
@@ -48,11 +56,23 @@ static void sensor_task(void *pvParameters)
             s_bat_volt = max17043_get_battery_voltage(&m_max17043);
             s_bat_soc  = max17043_get_soc(&m_max17043);
             s_lux      = bh1750_read_lux(&m_bh1750);
+
+            if (mpu6050_read(&m_mpu6050) == ESP_OK) {
+                s_accel_x = m_mpu6050.accel_x;
+                s_accel_y = m_mpu6050.accel_y;
+                s_accel_z = m_mpu6050.accel_z;
+                s_gyro_x  = m_mpu6050.gyro_x;
+                s_gyro_y  = m_mpu6050.gyro_y;
+                s_gyro_z  = m_mpu6050.gyro_z;
+            }
+
             xSemaphoreGive(i2c_mutex);
         }
 
         ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%, Batt: %.2f V (%.1f %%), Lux: %.2f",
                  s_temp, s_hum, s_bat_volt, s_bat_soc, s_lux);
+        ESP_LOGI(TAG, "Accel: %.2f, %.2f, %.2f g | Gyro: %.2f, %.2f, %.2f deg/s",
+                 s_accel_x, s_accel_y, s_accel_z, s_gyro_x, s_gyro_y, s_gyro_z);
 
         vTaskDelay(pdMS_TO_TICKS(SENSOR_SAMPLE_INTERVAL_MS));
     }
@@ -127,6 +147,7 @@ void app_main(void)
     htu21d_init(i2c_bus, &m_htu21d);
     max17043_init(i2c_bus, &m_max17043);
     bh1750_init(i2c_bus, &m_bh1750);
+    mpu6050_init(i2c_bus, &m_mpu6050);
 
     i2c_mutex = xSemaphoreCreateMutex();
 
