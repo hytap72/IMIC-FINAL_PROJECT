@@ -41,6 +41,25 @@ static void aws_iot_on_data(const char *topic, const char *data, int data_len)
     cJSON_Delete(root);
 }
 
+/* Gửi ngay thông tin thiết bị (IP, phiên bản firmware...) mỗi khi MQTT
+ * (re)connect, để dashboard biết IP thiết bị mà không phải đợi vòng
+ * telemetry định kỳ đầu tiên */
+static void aws_iot_on_connected(void)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "thing", AWS_IOT_THING_NAME);
+    cJSON_AddStringToObject(root, "fw_version", ota_manager_get_version());
+    cJSON_AddBoolToObject(root, "ota_in_progress", ota_manager_is_in_progress());
+    cJSON_AddStringToObject(root, "device_ip", ota_manager_get_device_ip());
+
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!payload) return;
+
+    mqtt_manager_publish(AWS_IOT_TOPIC_DATA, payload, 0, 0, 0);
+    cJSON_free(payload);
+}
+
 esp_err_t aws_iot_start(void)
 {
     static char uri[96];
@@ -53,6 +72,7 @@ esp_err_t aws_iot_start(void)
         .client_cert  = AWS_DEVICE_CERT,
         .client_key   = AWS_PRIVATE_KEY,
         .on_data      = aws_iot_on_data,
+        .on_connected = aws_iot_on_connected,
     };
 
     esp_err_t ret = mqtt_manager_start(&cfg);

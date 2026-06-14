@@ -9,6 +9,9 @@
  * topic/data đã được null-terminate, chỉ hợp lệ trong phạm vi callback. */
 typedef void (*mqtt_data_cb_t)(const char *topic, const char *data, int data_len);
 
+/* Callback gọi mỗi khi MQTT client (re)connect tới broker thành công */
+typedef void (*mqtt_connected_cb_t)(void);
+
 typedef struct {
     const char *uri;          /* "mqtts://host:port" hoặc "mqtt://host:port" */
     const char *client_id;    /* MQTT client id, NULL để auto-generate */
@@ -16,6 +19,7 @@ typedef struct {
     const char *client_cert;  /* PEM device cert, NULL nếu không dùng mTLS */
     const char *client_key;   /* PEM private key, NULL nếu không dùng mTLS */
     mqtt_data_cb_t on_data;   /* gọi khi có message trên topic đã subscribe */
+    mqtt_connected_cb_t on_connected; /* gọi khi (re)connect thành công, NULL nếu không cần */
 } mqtt_manager_config_t;
 
 /* Khởi tạo và kết nối MQTT client (chạy nền, tự reconnect) */

@@ -8,6 +8,7 @@ static const char *TAG = "MQTT_MANAGER";
 
 static esp_mqtt_client_handle_t s_client = NULL;
 static mqtt_data_cb_t s_on_data = NULL;
+static mqtt_connected_cb_t s_on_connected = NULL;
 static volatile bool s_connected = false;
 
 /* Lưu lại các topic đã subscribe để tự động subscribe lại mỗi khi
@@ -41,6 +42,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         for (int i = 0; i < s_subscription_count; i++) {
             int msg_id = esp_mqtt_client_subscribe(s_client, s_subscriptions[i].topic, s_subscriptions[i].qos);
             ESP_LOGI(TAG, "Subscribing to %s, msg_id=%d", s_subscriptions[i].topic, msg_id);
+        }
+        if (s_on_connected) {
+            s_on_connected();
         }
         break;
 
@@ -97,6 +101,7 @@ esp_err_t mqtt_manager_start(const mqtt_manager_config_t *config)
     }
 
     s_on_data = config->on_data;
+    s_on_connected = config->on_connected;
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = config->uri,
