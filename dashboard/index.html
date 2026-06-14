@@ -76,6 +76,22 @@
     .right-panel { border-left: none; border-top: 0.5px solid var(--border-light); max-height: 220px; }
   }
 
+  /* ── FOCUS MODE (ẩn navbar/topbar/log để rộng chỗ cho camera + điều khiển) ── */
+  .app.focus-mode .topbar,
+  .app.focus-mode .sidebar,
+  .app.focus-mode .right-panel { display: none; }
+  .app.focus-mode { grid-template-rows: 1fr; }
+  .app.focus-mode .app-body { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+
+  .focus-toggle {
+    position: fixed; top: 10px; right: 10px; z-index: 50;
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-primary); border: 0.5px solid var(--border-light);
+    color: var(--text-primary); cursor: pointer; font-size: 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+
   /* ── TOPBAR ── */
   .topbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -391,6 +407,10 @@
       </div>
 
       <div id="tab-control" style="display:none">
+        <button class="focus-toggle" id="focus-toggle-btn" onclick="toggleFocusMode()" title="Ẩn/hiện navbar &amp; log">
+          <i class="ti ti-arrows-maximize" id="focus-toggle-icon"></i>
+        </button>
+
         <div class="section-label">Camera trực tiếp</div>
         <div class="camera">
           <canvas id="cam-stream"></canvas>
@@ -508,6 +528,14 @@
     });
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     if (el) el.classList.add('active');
+  }
+
+  /* Ẩn/hiện topbar + sidebar + log panel để dành toàn màn hình cho
+   * camera + nút điều khiển trên mobile */
+  function toggleFocusMode() {
+    const focused = document.querySelector('.app').classList.toggle('focus-mode');
+    document.getElementById('focus-toggle-icon').className =
+      focused ? 'ti ti-arrows-minimize' : 'ti ti-arrows-maximize';
   }
 
   // ── CAMERA: poll ảnh JPEG liên tục, vẽ lên canvas ──
