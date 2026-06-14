@@ -72,3 +72,48 @@ const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:..."; // điền sau Bước 1
 ## Giao diện
 - 5 ô hiển thị: nhiệt độ, độ ẩm, pin (V), pin (%), trạng thái motor — cập nhật mỗi 5s (theo `TELEMETRY_INTERVAL_MS` trong firmware).
 - D-pad điều khiển: nhấn giữ để chạy (FORWARD/BACKWARD/LEFT/RIGHT), nhả ra tự gửi STOP — giống hành vi app Android.
+
+## OTA qua Internet (upload firmware lên S3)
+
+Tab "Cập nhật OTA" có nút **"Upload lên S3 & cập nhật qua Internet"**: dashboard
+upload file `.bin` lên một bucket S3 (dùng credentials Cognito guest có sẵn),
+tạo presigned URL rồi gửi lệnh `{"ota_url": "..."}` qua MQTT — ESP32 tải firmware
+qua HTTPS, không cần cùng mạng LAN với dashboard.
+
+### Bước 1 — Tạo bucket S3
+1. AWS Console → **S3** → **Create bucket**, ví dụ `imic-ota-firmware`.
+2. Giữ **Block all public access = ON** (không cần public, dùng presigned URL).
+3. Vào tab **Permissions** → **CORS configuration**, dán:
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": []
+  }
+]
+```
+   (Có thể giới hạn `AllowedOrigins` về domain host dashboard thay vì `*`.)
+
+### Bước 2 — Cấp quyền S3 cho Cognito Unauthenticated role
+Vào **IAM** → **Roles** → mở role `Cognito_imic_dashboard_poolUnauth` (đã tạo ở
+Bước 1 phần IoT trên) → **Add permissions** → **Create inline policy** → tab JSON,
+thêm statement sau vào policy hiện có:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject", "s3:GetObject"],
+  "Resource": "arn:aws:s3:::imic-ota-firmware/firmware/*"
+}
+```
+
+### Bước 3 — Cấu hình `index.html`
+```js
+const OTA_S3_BUCKET = "imic-ota-firmware";
+const OTA_S3_PREFIX = "firmware/";
+```
+
+> Lưu ý: vì identity pool cho phép **bất kỳ ai** (guest) ghi vào bucket này,
+> chỉ cấp quyền trên prefix `firmware/*`, không cấp quyền rộng hơn trên bucket.

@@ -440,7 +440,12 @@
 
           <button onclick="uploadOtaFile()"
                   style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--blue); color:#fff; cursor:pointer; font-family:var(--font-sans);">
-            <i class="ti ti-refresh-alert"></i> Tải lên & cập nhật OTA
+            <i class="ti ti-refresh-alert"></i> Tải lên & cập nhật OTA (cùng mạng LAN)
+          </button>
+
+          <button onclick="uploadOtaToS3()"
+                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:#ff9900; color:#fff; cursor:pointer; font-family:var(--font-sans);">
+            <i class="ti ti-cloud-upload"></i> Upload lên S3 & cập nhật qua Internet
           </button>
 
           <div class="section-label" style="margin-top:14px">Hoặc dùng URL firmware (.bin)</div>
@@ -489,6 +494,12 @@
   const AWS_REGION        = "ap-southeast-2";
   const AWS_IOT_ENDPOINT  = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
   const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:a3d49410-6887-4f7b-a3f5-a16c27eda9e6";
+
+  /* Bucket S3 để upload firmware OTA (.bin) — xem dashboard/README.md để tạo
+   * bucket và cấp quyền s3:PutObject/GetObject cho Cognito Unauthenticated role.
+   * Để trống "" để ẩn nút upload S3. */
+  const OTA_S3_BUCKET = "";
+  const OTA_S3_PREFIX = "firmware/";
 
   const TOPIC_DATA = "imic-esp32/data";
   const TOPIC_CMD  = "imic-esp32/cmd";
@@ -770,6 +781,46 @@
     } catch (e) {
       addLog('err', 'Lỗi tải firmware: ' + e.message +
              ' (kiểm tra dashboard và thiết bị cùng mạng, và truy cập dashboard qua http://)');
+    }
+  }
+
+  /* Upload file .bin lên S3 (dùng credentials Cognito guest có sẵn), tạo
+   * presigned URL rồi gửi lệnh OTA qua MQTT — thiết bị tải về qua Internet,
+   * không cần cùng mạng LAN với dashboard */
+  async function uploadOtaToS3() {
+    if (!OTA_S3_BUCKET) {
+      addLog('warn', 'Chưa cấu hình OTA_S3_BUCKET trong index.html (xem dashboard/README.md)');
+      return;
+    }
+    if (!client) { addLog('warn', 'Chưa kết nối MQTT'); return; }
+
+    const fileInput = document.getElementById('ota-file');
+    const file = fileInput.files[0];
+    if (!file) { addLog('warn', 'Chưa chọn file firmware (.bin)'); return; }
+
+    const key = OTA_S3_PREFIX + Date.now() + '-' + file.name;
+    addLog('info', `Đang upload ${file.name} (${file.size} bytes) lên s3://${OTA_S3_BUCKET}/${key} ...`);
+
+    try {
+      const s3 = new AWS.S3({ region: AWS_REGION });
+      await s3.putObject({
+        Bucket: OTA_S3_BUCKET,
+        Key: key,
+        Body: file,
+        ContentType: 'application/octet-stream',
+      }).promise();
+
+      const url = s3.getSignedUrl('getObject', {
+        Bucket: OTA_S3_BUCKET,
+        Key: key,
+        Expires: 3600,
+      });
+
+      addLog('', 'Upload S3 xong, đang gửi lệnh OTA...');
+      client.publish(TOPIC_CMD, JSON.stringify({ ota_url: url }));
+      addLog('', 'Đã gửi lệnh OTA (S3): ' + key);
+    } catch (e) {
+      addLog('err', 'Lỗi upload S3: ' + e.message);
     }
   }
 
