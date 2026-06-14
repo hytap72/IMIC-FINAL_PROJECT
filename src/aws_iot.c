@@ -77,6 +77,7 @@ esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
     cJSON_AddNumberToObject(root, "motor_state", motor_state);
     cJSON_AddStringToObject(root, "fw_version", ota_manager_get_version());
     cJSON_AddBoolToObject(root, "ota_in_progress", ota_manager_is_in_progress());
+    cJSON_AddStringToObject(root, "device_ip", ota_manager_get_device_ip());
 
     char *payload = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

@@ -17,5 +17,5 @@ set(SOURCES
 idf_component_register(
     SRCS ${SOURCES}
     INCLUDE_DIRS "." "../include"
-    REQUIRES driver bt nvs_flash esp_wifi esp_event esp-tls mqtt json lwip esp_driver_i2c esp_https_ota app_update
+    REQUIRES driver bt nvs_flash esp_wifi esp_event esp-tls mqtt json lwip esp_driver_i2c esp_https_ota app_update esp_http_server
 )

@@ -22,6 +22,7 @@
 #include "tcp_client.h"
 #include "udp_client.h"
 #include "net_config.h"
+#include "ota_manager.h"
 
 static const char *TAG = "MAIN";
 
@@ -143,6 +144,10 @@ static void on_wifi_connected(void)
     /* WiFi/mạng hoạt động tốt -> xác nhận firmware hiện tại ổn định,
      * tránh bị bootloader tự rollback về firmware cũ sau OTA */
     esp_ota_mark_app_valid_cancel_rollback();
+
+    /* Khởi động HTTP server nhận file firmware (.bin) upload trực tiếp
+     * từ dashboard qua POST /update */
+    ota_manager_start_server();
 
     sync_time();
     aws_iot_start();

@@ -425,14 +425,31 @@
             <div class="sensor-name"><i class="ti ti-cloud-download" style="font-size:14px"></i> Trạng thái OTA</div>
             <span class="pill" id="ota-status-pill">Đang chờ</span>
           </div>
+          <div class="sensor-top">
+            <div class="sensor-name"><i class="ti ti-wifi" style="font-size:14px"></i> IP thiết bị</div>
+            <span class="sensor-chip" id="txt-device-ip">--</span>
+          </div>
 
-          <div class="section-label" style="margin-top:14px">URL firmware (.bin)</div>
+          <div class="section-label" style="margin-top:14px">Tải lên file firmware (.bin)</div>
+          <input id="ota-file" type="file" accept=".bin,application/octet-stream"
+                 style="width:100%; padding:8px 10px; border-radius:8px; border:0.5px solid var(--border-mid); background:var(--bg-secondary); color:var(--text-primary); font-family:var(--font-mono); font-size:12px;" />
+          <div style="margin-top:6px; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">
+            Sau mỗi lần build PlatformIO, file nằm tại:<br>
+            .pio/build/esp32doit-devkit-v1/firmware.bin
+          </div>
+
+          <button onclick="uploadOtaFile()"
+                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--blue); color:#fff; cursor:pointer; font-family:var(--font-sans);">
+            <i class="ti ti-refresh-alert"></i> Tải lên & cập nhật OTA
+          </button>
+
+          <div class="section-label" style="margin-top:14px">Hoặc dùng URL firmware (.bin)</div>
           <input id="ota-url" type="text" placeholder="http://192.168.1.100:8000/firmware.bin"
                  style="width:100%; padding:8px 10px; border-radius:8px; border:0.5px solid var(--border-mid); background:var(--bg-secondary); color:var(--text-primary); font-family:var(--font-mono); font-size:12px;" />
 
           <button onclick="sendOta()"
-                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--blue); color:#fff; cursor:pointer; font-family:var(--font-sans);">
-            <i class="ti ti-refresh-alert"></i> Bắt đầu cập nhật OTA
+                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--bg-tertiary); color:var(--text-primary); cursor:pointer; font-family:var(--font-sans);">
+            <i class="ti ti-link"></i> Gửi lệnh OTA qua URL
           </button>
         </div>
       </div>
@@ -703,6 +720,9 @@
           pill.textContent = d.ota_in_progress ? 'Đang cập nhật...' : 'Đang chờ';
           pill.className = 'pill ' + (d.ota_in_progress ? 'warn' : '');
         }
+        if (typeof d.device_ip === "string") {
+          document.getElementById('txt-device-ip').textContent = d.device_ip;
+        }
 
         if (temp !== null && hum !== null) {
           pushTelemetryPoint(temp, hum);
@@ -727,6 +747,30 @@
     if (!url) return;
     client.publish(TOPIC_CMD, JSON.stringify({ ota_url: url }));
     addLog('info', 'Đã gửi lệnh OTA: ' + url);
+  }
+
+  /* Upload file .bin trực tiếp tới HTTP server OTA chạy trên thiết bị
+   * (POST /update tới IP của thiết bị, cùng mạng WiFi) */
+  async function uploadOtaFile() {
+    const fileInput = document.getElementById('ota-file');
+    const file = fileInput.files[0];
+    if (!file) { addLog('warn', 'Chưa chọn file firmware (.bin)'); return; }
+
+    const ip = document.getElementById('txt-device-ip').textContent.trim();
+    if (!ip || ip === '--') { addLog('warn', 'Chưa biết IP thiết bị, đợi telemetry đầu tiên'); return; }
+
+    addLog('info', `Đang tải ${file.name} (${file.size} bytes) lên http://${ip}/update ...`);
+    try {
+      const resp = await fetch(`http://${ip}/update`, {
+        method: 'POST',
+        body: file,
+      });
+      const text = await resp.text();
+      addLog(resp.ok ? '' : 'err', 'OTA: ' + text);
+    } catch (e) {
+      addLog('err', 'Lỗi tải firmware: ' + e.message +
+             ' (kiểm tra dashboard và thiết bị cùng mạng, và truy cập dashboard qua http://)');
+    }
   }
 
   /* Hold-to-run: nhấn giữ -> gửi lệnh, nhả ra -> gửi STOP (trừ nút STOP) */
