@@ -10,6 +10,7 @@ static esp_mqtt_client_handle_t s_client = NULL;
 static mqtt_data_cb_t s_on_data = NULL;
 static mqtt_connected_cb_t s_on_connected = NULL;
 static volatile bool s_connected = false;
+static esp_mqtt_client_config_t s_mqtt_cfg;
 
 /* Lưu lại các topic đã subscribe để tự động subscribe lại mỗi khi
  * (re)connect tới broker — esp_mqtt_client_subscribe() chỉ có tác dụng
@@ -25,7 +26,7 @@ static int s_subscription_count = 0;
 
 /* Buffer tạm để null-terminate topic/data trước khi đưa vào callback */
 #define MQTT_TOPIC_BUF_LEN  128
-#define MQTT_DATA_BUF_LEN   512
+#define MQTT_DATA_BUF_LEN   2048
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data)
@@ -103,7 +104,7 @@ esp_err_t mqtt_manager_start(const mqtt_manager_config_t *config)
     s_on_data = config->on_data;
     s_on_connected = config->on_connected;
 
-    esp_mqtt_client_config_t mqtt_cfg = {
+    s_mqtt_cfg = (esp_mqtt_client_config_t){
         .broker.address.uri = config->uri,
         .broker.verification.certificate = config->ca_cert,
         .credentials.client_id = config->client_id,
@@ -112,9 +113,13 @@ esp_err_t mqtt_manager_start(const mqtt_manager_config_t *config)
         /* Mặc định 10s không đủ cho mTLS handshake (RSA) trên ESP32 */
         .network.timeout_ms = 30000,
         .network.reconnect_timeout_ms = 10000,
+        /* Mặc định 1024 bytes không đủ chứa URL OTA presigned S3 (kèm
+         * x-amz-security-token rất dài) -> message bị chia thành nhiều
+         * MQTT_EVENT_DATA (chunk sau có topic rỗng) làm JSON bị cắt giữa. */
+        .buffer.size = 2048,
     };
 
-    s_client = esp_mqtt_client_init(&mqtt_cfg);
+    s_client = esp_mqtt_client_init(&s_mqtt_cfg);
     if (!s_client) {
         ESP_LOGE(TAG, "Failed to init MQTT client");
         return ESP_FAIL;
@@ -129,6 +134,41 @@ esp_err_t mqtt_manager_start(const mqtt_manager_config_t *config)
     }
 
     ESP_LOGI(TAG, "MQTT client started, connecting to %s", config->uri);
+    return ESP_OK;
+}
+
+esp_err_t mqtt_manager_stop(void)
+{
+    if (!s_client) return ESP_ERR_INVALID_STATE;
+
+    esp_mqtt_client_stop(s_client);
+    esp_mqtt_client_destroy(s_client);
+    s_client = NULL;
+    s_connected = false;
+    return ESP_OK;
+}
+
+esp_err_t mqtt_manager_reconnect(void)
+{
+    if (s_client) return ESP_ERR_INVALID_STATE;
+
+    s_client = esp_mqtt_client_init(&s_mqtt_cfg);
+    if (!s_client) {
+        ESP_LOGE(TAG, "Failed to init MQTT client");
+        return ESP_FAIL;
+    }
+
+    esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+
+    esp_err_t ret = esp_mqtt_client_start(s_client);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start MQTT client: %s", esp_err_to_name(ret));
+        esp_mqtt_client_destroy(s_client);
+        s_client = NULL;
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "MQTT client restarted");
     return ESP_OK;
 }
 

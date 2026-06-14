@@ -438,23 +438,9 @@
             .pio/build/esp32doit-devkit-v1/firmware.bin
           </div>
 
-          <button onclick="uploadOtaFile()"
-                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--blue); color:#fff; cursor:pointer; font-family:var(--font-sans);">
-            <i class="ti ti-refresh-alert"></i> Tải lên & cập nhật OTA (cùng mạng LAN)
-          </button>
-
           <button onclick="uploadOtaToS3()"
                   style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:#ff9900; color:#fff; cursor:pointer; font-family:var(--font-sans);">
             <i class="ti ti-cloud-upload"></i> Upload lên S3 & cập nhật qua Internet
-          </button>
-
-          <div class="section-label" style="margin-top:14px">Hoặc dùng URL firmware (.bin)</div>
-          <input id="ota-url" type="text" placeholder="http://192.168.1.100:8000/firmware.bin"
-                 style="width:100%; padding:8px 10px; border-radius:8px; border:0.5px solid var(--border-mid); background:var(--bg-secondary); color:var(--text-primary); font-family:var(--font-mono); font-size:12px;" />
-
-          <button onclick="sendOta()"
-                  style="margin-top:10px; width:100%; padding:8px; border-radius:8px; border:none; background:var(--bg-tertiary); color:var(--text-primary); cursor:pointer; font-family:var(--font-sans);">
-            <i class="ti ti-link"></i> Gửi lệnh OTA qua URL
           </button>
         </div>
       </div>
@@ -750,38 +736,6 @@
   function sendCmd(cmd) {
     if (!client) return;
     client.publish(TOPIC_CMD, JSON.stringify({ cmd: cmd }));
-  }
-
-  function sendOta() {
-    if (!client) return;
-    const url = document.getElementById('ota-url').value.trim();
-    if (!url) return;
-    client.publish(TOPIC_CMD, JSON.stringify({ ota_url: url }));
-    addLog('info', 'Đã gửi lệnh OTA: ' + url);
-  }
-
-  /* Upload file .bin trực tiếp tới HTTP server OTA chạy trên thiết bị
-   * (POST /update tới IP của thiết bị, cùng mạng WiFi) */
-  async function uploadOtaFile() {
-    const fileInput = document.getElementById('ota-file');
-    const file = fileInput.files[0];
-    if (!file) { addLog('warn', 'Chưa chọn file firmware (.bin)'); return; }
-
-    const ip = document.getElementById('txt-device-ip').textContent.trim();
-    if (!ip || ip === '--') { addLog('warn', 'Chưa biết IP thiết bị, đợi telemetry đầu tiên'); return; }
-
-    addLog('info', `Đang tải ${file.name} (${file.size} bytes) lên http://${ip}/update ...`);
-    try {
-      const resp = await fetch(`http://${ip}/update`, {
-        method: 'POST',
-        body: file,
-      });
-      const text = await resp.text();
-      addLog(resp.ok ? '' : 'err', 'OTA: ' + text);
-    } catch (e) {
-      addLog('err', 'Lỗi tải firmware: ' + e.message +
-             ' (kiểm tra dashboard và thiết bị cùng mạng, và truy cập dashboard qua http://)');
-    }
   }
 
   /* Upload file .bin lên S3 (dùng credentials Cognito guest có sẵn), tạo

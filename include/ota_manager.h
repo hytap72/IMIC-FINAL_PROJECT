@@ -16,12 +16,6 @@ bool ota_manager_is_in_progress(void);
 /* Phiên bản firmware hiện tại (PROJECT_VER, từ app description) */
 const char *ota_manager_get_version(void);
 
-/* Khởi động HTTP server với endpoint POST /update để nhận file firmware
- * (.bin) tải lên trực tiếp từ trình duyệt (cùng mạng WiFi với thiết bị).
- * Ghi thẳng vào partition OTA kế tiếp; nếu thành công thiết bị tự
- * esp_restart() để chạy firmware mới. */
-esp_err_t ota_manager_start_server(void);
-
 /* Lưu lại địa chỉ IP hiện tại của thiết bị (dạng "a.b.c.d") để hiển thị
  * trên dashboard và dùng làm đích upload firmware */
 void ota_manager_set_device_ip(const char *ip);

@@ -198,10 +198,6 @@ static void on_wifi_connected(void)
      * tránh bị bootloader tự rollback về firmware cũ sau OTA */
     esp_ota_mark_app_valid_cancel_rollback();
 
-    /* Khởi động HTTP server nhận file firmware (.bin) upload trực tiếp
-     * từ dashboard qua POST /update */
-    ota_manager_start_server();
-
     sync_time();
     aws_iot_start();
     tcp_client_start();

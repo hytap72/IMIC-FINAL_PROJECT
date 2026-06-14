@@ -3,11 +3,13 @@
 Trang web tĩnh (`index.html`) để **bất kỳ ai có link đều xem được telemetry và điều khiển robot**, kết nối thẳng tới AWS IoT Core qua MQTT-over-WebSocket (không cần backend server).
 
 ## Cách hoạt động
+
 - Trình duyệt lấy **credentials tạm thời, không cần đăng nhập** từ một **Cognito Identity Pool** (unauthenticated identity).
 - Dùng credentials đó kết nối MQTT tới AWS IoT Core (`wss://...`).
 - Subscribe `imic-esp32/data` để hiển thị telemetry, publish `imic-esp32/cmd` để điều khiển motor.
 
 ## Bước 1 — Tạo Cognito Identity Pool
+
 1. AWS Console → **Cognito** → **Identity pools** → **Create identity pool**.
 2. Đặt tên, ví dụ `imic_dashboard_pool`.
 3. Bật **"Enable access to unauthenticated identities"** (Guest access).
@@ -15,6 +17,7 @@ Trang web tĩnh (`index.html`) để **bất kỳ ai có link đều xem đượ
 5. Copy **Identity pool ID** (dạng `ap-southeast-2:xxxxxxxx-xxxx-...`) và dán vào `COGNITO_IDENTITY_POOL_ID` trong `index.html`.
 
 ## Bước 2 — Gắn quyền IoT cho Role Unauthenticated
+
 Vào **IAM** → **Roles** → mở role `Cognito_imic_dashboard_poolUnauth` → **Add permissions** → **Create inline policy** → tab JSON, dán (thay `<REGION>` và `<ACCOUNT_ID>`):
 
 ```json
@@ -51,11 +54,14 @@ Vào **IAM** → **Roles** → mở role `Cognito_imic_dashboard_poolUnauth` →
 > Đây là quyền **chỉ đọc telemetry + gửi lệnh điều khiển**, không cho phép truy cập gì khác trong account.
 
 ## Bước 3 — Host trang web
+
 Có thể:
+
 - **Mở trực tiếp file `index.html`** trên trình duyệt (đơn giản nhất để test).
 - Hoặc host public bằng **S3 Static Website Hosting** (miễn phí gần như hoàn toàn) hoặc GitHub Pages, Netlify, Vercel... để có link chia sẻ cho mọi người.
 
 ### Host bằng S3 (tuỳ chọn)
+
 1. Tạo bucket S3, ví dụ `imic-dashboard`.
 2. Upload `index.html`.
 3. Bật **Static website hosting** (Properties tab), set `index.html` làm Index document.
@@ -63,13 +69,15 @@ Có thể:
 5. Truy cập qua URL endpoint của static website.
 
 ## Cấu hình trong `index.html`
+
 ```js
-const AWS_REGION        = "ap-southeast-2";
-const AWS_IOT_ENDPOINT  = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
+const AWS_REGION = "ap-southeast-2";
+const AWS_IOT_ENDPOINT = "a1jnvdnvaug36x-ats.iot.ap-southeast-2.amazonaws.com";
 const COGNITO_IDENTITY_POOL_ID = "ap-southeast-2:..."; // điền sau Bước 1
 ```
 
 ## Giao diện
+
 - 5 ô hiển thị: nhiệt độ, độ ẩm, pin (V), pin (%), trạng thái motor — cập nhật mỗi 5s (theo `TELEMETRY_INTERVAL_MS` trong firmware).
 - D-pad điều khiển: nhấn giữ để chạy (FORWARD/BACKWARD/LEFT/RIGHT), nhả ra tự gửi STOP — giống hành vi app Android.
 
@@ -81,9 +89,11 @@ tạo presigned URL rồi gửi lệnh `{"ota_url": "..."}` qua MQTT — ESP32 t
 qua HTTPS, không cần cùng mạng LAN với dashboard.
 
 ### Bước 1 — Tạo bucket S3
+
 1. AWS Console → **S3** → **Create bucket**, ví dụ `imic-ota-firmware`.
 2. Giữ **Block all public access = ON** (không cần public, dùng presigned URL).
 3. Vào tab **Permissions** → **CORS configuration**, dán:
+
 ```json
 [
   {
@@ -94,9 +104,11 @@ qua HTTPS, không cần cùng mạng LAN với dashboard.
   }
 ]
 ```
-   (Có thể giới hạn `AllowedOrigins` về domain host dashboard thay vì `*`.)
+
+(Có thể giới hạn `AllowedOrigins` về domain host dashboard thay vì `*`.)
 
 ### Bước 2 — Cấp quyền S3 cho Cognito Unauthenticated role
+
 Vào **IAM** → **Roles** → mở role `Cognito_imic_dashboard_poolUnauth` (đã tạo ở
 Bước 1 phần IoT trên) → **Add permissions** → **Create inline policy** → tab JSON,
 thêm statement sau vào policy hiện có:
@@ -110,6 +122,7 @@ thêm statement sau vào policy hiện có:
 ```
 
 ### Bước 3 — Cấu hình `index.html`
+
 ```js
 const OTA_S3_BUCKET = "imic-ota-firmware";
 const OTA_S3_PREFIX = "firmware/";

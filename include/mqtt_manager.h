@@ -33,4 +33,12 @@ esp_err_t mqtt_manager_subscribe(const char *topic, int qos);
 
 bool mqtt_manager_is_connected(void);
 
+/* Dừng MQTT client (giải phóng buffer/TLS context) để tạm rảnh bộ nhớ
+ * cho một kết nối TLS khác (ví dụ HTTPS OTA) */
+esp_err_t mqtt_manager_stop(void);
+
+/* Khởi động lại MQTT client sau khi đã mqtt_manager_stop(), dùng config
+ * đã truyền cho mqtt_manager_start() trước đó */
+esp_err_t mqtt_manager_reconnect(void);
+
 #endif
