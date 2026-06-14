@@ -23,4 +23,10 @@ void ota_manager_set_device_ip(const char *ip);
 /* Địa chỉ IP hiện tại của thiết bị, hoặc "0.0.0.0" nếu chưa kết nối */
 const char *ota_manager_get_device_ip(void);
 
+/* Callback gọi mỗi khi trạng thái OTA (ota_in_progress) thay đổi, để publish
+ * ngay lên MQTT trước khi mqtt_manager_stop() làm mất kết nối trong lúc tải
+ * firmware -> dashboard thấy được "Đang cập nhật..." */
+typedef void (*ota_status_cb_t)(void);
+void ota_manager_set_status_cb(ota_status_cb_t cb);
+
 #endif

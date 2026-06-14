@@ -12,6 +12,7 @@ static const char *TAG = "OTA_MANAGER";
 
 static volatile bool s_ota_in_progress = false;
 static char s_device_ip[16] = "0.0.0.0";
+static ota_status_cb_t s_status_cb = NULL;
 
 static void ota_task(void *pvParameter)
 {
@@ -32,6 +33,10 @@ static void ota_task(void *pvParameter)
         .http_config = &http_config,
     };
 
+    /* Báo trạng thái "Đang cập nhật..." lên dashboard TRƯỚC khi dừng MQTT,
+     * vì mqtt_manager_stop() ngay sau đây sẽ làm mất kết nối trong lúc tải */
+    if (s_status_cb) s_status_cb();
+
     /* Giải phóng buffer/TLS context của MQTT (mTLS) để có đủ heap liên tục
      * cho kết nối TLS của HTTPS OTA -> tránh mbedtls_ssl_setup ALLOC_FAILED */
     mqtt_manager_stop();
@@ -48,6 +53,7 @@ static void ota_task(void *pvParameter)
 
     free(url);
     s_ota_in_progress = false;
+    if (s_status_cb) s_status_cb();
     vTaskDelete(NULL);
 }
 
@@ -90,4 +96,9 @@ void ota_manager_set_device_ip(const char *ip)
 const char *ota_manager_get_device_ip(void)
 {
     return s_device_ip;
+}
+
+void ota_manager_set_status_cb(ota_status_cb_t cb)
+{
+    s_status_cb = cb;
 }

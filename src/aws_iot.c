@@ -75,6 +75,10 @@ esp_err_t aws_iot_start(void)
         .on_connected = aws_iot_on_connected,
     };
 
+    /* Cho ota_manager publish trạng thái OTA ngay trước khi nó tạm dừng
+     * MQTT để tải firmware -> dashboard thấy "Đang cập nhật..." */
+    ota_manager_set_status_cb(aws_iot_on_connected);
+
     esp_err_t ret = mqtt_manager_start(&cfg);
     if (ret != ESP_OK) return ret;
 
