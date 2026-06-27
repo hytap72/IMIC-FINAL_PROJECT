@@ -128,7 +128,6 @@ static void sensor_task(void *pvParameters)
                 sensor_data.s_temp = htu21d_get_temperature(&m_htu21d);
                 sensor_data.s_hum  = htu21d_get_humidity(&m_htu21d);
                 sensor_mark_result(&hc_htu21d, sensor_data.s_temp > -900.0f && sensor_data.s_hum > -900.0f);
-
             }
 
             if (!sensor_should_skip(&hc_max17043)) {
