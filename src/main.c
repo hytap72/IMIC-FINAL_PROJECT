@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -35,22 +36,34 @@ static mpu6050_t  m_mpu6050;
 static SemaphoreHandle_t i2c_mutex;
 
 /* Giá trị sensor mới nhất, cập nhật định kỳ bởi sensor_task */
-static volatile float s_temp     = -999.0f;
-static volatile float s_hum      = -999.0f;
-static volatile float s_bat_volt = -999.0f;
-static volatile float s_bat_soc  = -999.0f;
-static volatile float s_lux      = -999.0f;
-static volatile float s_accel_x  = 0.0f;
-static volatile float s_accel_y  = 0.0f;
-static volatile float s_accel_z  = 0.0f;
-static volatile float s_gyro_x   = 0.0f;
-static volatile float s_gyro_y   = 0.0f;
-static volatile float s_gyro_z   = 0.0f;
+
+typedef struct
+{
+    float s_temp;
+    float s_hum;
+    float s_bat_volt;
+    float s_bat_soc;
+    float s_lux;
+
+    float s_accel_x;
+    float s_accel_y;
+    float s_accel_z;
+
+    float s_gyro_x;
+    float s_gyro_y;
+    float s_gyro_z;
+
+    float s_heading;
+
+} sensor_data_t;
+
+static QueueHandle_t sensor_queue;
+
 
 /* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
  * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
  * theo thời gian do sai số tích lũy của gyroscope. */
-static volatile float s_heading  = 0.0f;
+
 
 /* Theo dõi lỗi liên tiếp của từng cảm biến I2C. Khi một cảm biến bị NACK
  * (không có trên bus / mất kết nối) nhiều lần liên tiếp, tạm ngưng đọc
@@ -92,52 +105,67 @@ static void sensor_mark_result(sensor_health_t *h, bool ok)
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
 {
+    sensor_data_t sensor_data = {
+        .s_temp      = -999.0f,
+        .s_hum       = -999.0f,
+        .s_bat_volt  = -999.0f,
+        .s_bat_soc   = -999.0f,
+        .s_lux       = -999.0f,
+
+        .s_accel_x   = 0.0f,
+        .s_accel_y   = 0.0f,
+        .s_accel_z   = 0.0f,
+
+        .s_gyro_x    = 0.0f,
+        .s_gyro_y    = 0.0f,
+        .s_gyro_z    = 0.0f,
+
+        .s_heading   = 0.0f
+    };
     while (1) {
         if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             if (!sensor_should_skip(&hc_htu21d)) {
-                float temp = htu21d_get_temperature(&m_htu21d);
-                float hum  = htu21d_get_humidity(&m_htu21d);
-                sensor_mark_result(&hc_htu21d, temp > -900.0f && hum > -900.0f);
-                s_temp = temp;
-                s_hum  = hum;
+                sensor_data.s_temp = htu21d_get_temperature(&m_htu21d);
+                sensor_data.s_hum  = htu21d_get_humidity(&m_htu21d);
+                sensor_mark_result(&hc_htu21d, sensor_data.s_temp > -900.0f && sensor_data.s_hum > -900.0f);
+
             }
 
             if (!sensor_should_skip(&hc_max17043)) {
-                float bat_volt = max17043_get_battery_voltage(&m_max17043);
-                float bat_soc  = max17043_get_soc(&m_max17043);
-                sensor_mark_result(&hc_max17043, bat_volt > -900.0f && bat_soc > -900.0f);
-                s_bat_volt = bat_volt;
-                s_bat_soc  = bat_soc;
+                sensor_data.s_bat_volt = max17043_get_battery_voltage(&m_max17043);
+                sensor_data.s_bat_soc  = max17043_get_soc(&m_max17043);
+                sensor_mark_result(&hc_max17043, sensor_data.s_bat_volt > -900.0f && sensor_data.s_bat_soc > -900.0f);  
             }
 
             if (!sensor_should_skip(&hc_bh1750)) {
-                float lux = bh1750_read_lux(&m_bh1750);
-                sensor_mark_result(&hc_bh1750, lux > -900.0f);
-                s_lux = lux;
+                sensor_data.s_lux = bh1750_read_lux(&m_bh1750);
+                sensor_mark_result(&hc_bh1750, sensor_data.s_lux > -900.0f);
+
             }
 
             if (mpu6050_read(&m_mpu6050) == ESP_OK) {
-                s_accel_x = m_mpu6050.accel_x;
-                s_accel_y = m_mpu6050.accel_y;
-                s_accel_z = m_mpu6050.accel_z;
-                s_gyro_x  = m_mpu6050.gyro_x;
-                s_gyro_y  = m_mpu6050.gyro_y;
-                s_gyro_z  = m_mpu6050.gyro_z;
+                sensor_data.s_accel_x = m_mpu6050.accel_x;
+                sensor_data.s_accel_y = m_mpu6050.accel_y;
+                sensor_data.s_accel_z = m_mpu6050.accel_z;
+                sensor_data.s_gyro_x  = m_mpu6050.gyro_x;
+                sensor_data.s_gyro_y  = m_mpu6050.gyro_y;
+                sensor_data.s_gyro_z  = m_mpu6050.gyro_z;
 
                 /* Tích phân gyro_z (độ/giây) theo chu kỳ lấy mẫu để ra góc heading */
-                float heading = s_heading + s_gyro_z * (SENSOR_SAMPLE_INTERVAL_MS / 1000.0f);
+                float heading = sensor_data.s_heading + sensor_data.s_gyro_z * (SENSOR_SAMPLE_INTERVAL_MS / 1000.0f);
                 heading = fmodf(heading, 360.0f);
                 if (heading < 0.0f) heading += 360.0f;
-                s_heading = heading;
+                sensor_data.s_heading = heading;
             }
 
             xSemaphoreGive(i2c_mutex);
+            xQueueOverwrite(sensor_queue, &sensor_data);
         }
 
         ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%, Batt: %.2f V (%.1f %%), Lux: %.2f",
-                 s_temp, s_hum, s_bat_volt, s_bat_soc, s_lux);
+                 sensor_data.s_temp, sensor_data.s_hum, sensor_data.s_bat_volt, sensor_data.s_bat_soc, sensor_data.s_lux);
         ESP_LOGI(TAG, "Accel: %.2f, %.2f, %.2f g | Gyro: %.2f, %.2f, %.2f deg/s | Heading: %.1f deg",
-                 s_accel_x, s_accel_y, s_accel_z, s_gyro_x, s_gyro_y, s_gyro_z, s_heading);
+                 sensor_data.s_accel_x, sensor_data.s_accel_y, sensor_data.s_accel_z, sensor_data.s_gyro_x, sensor_data.s_gyro_y, sensor_data.s_gyro_z, sensor_data.s_heading);
 
         vTaskDelay(pdMS_TO_TICKS(SENSOR_SAMPLE_INTERVAL_MS));
     }
@@ -147,23 +175,21 @@ static void sensor_task(void *pvParameters)
  * lên AWS IoT (MQTT) và UDP server */
 static void telemetry_task(void *pvParameters)
 {
+    sensor_data_t sensor_data;
+    motor_cmd_t motor_state;
     while (1) {
-        float temp     = s_temp;
-        float hum      = s_hum;
-        float bat_volt = s_bat_volt;
-        float bat_soc  = s_bat_soc;
-        float heading  = s_heading;
-        motor_cmd_t motor_state = driver_motor_get_state();
-
+        xQueuePeek(sensor_queue, &sensor_data, 0);
+        motor_state = driver_motor_get_state();
         if (aws_iot_is_connected()) {
-            aws_iot_publish_telemetry(temp, hum, bat_volt, bat_soc, heading, (uint8_t)motor_state);
+            aws_iot_publish_telemetry(sensor_data.s_temp, sensor_data.s_hum, sensor_data.s_bat_volt, sensor_data.s_bat_soc, sensor_data.s_heading, (uint8_t)motor_state);
         }
+
 
         if (udp_client_is_ready()) {
             char payload[112];
             int len = snprintf(payload, sizeof(payload),
-                                "{\"temp\":%.2f,\"hum\":%.2f,\"batt_v\":%.2f,\"soc\":%.1f,\"heading\":%.1f,\"motor\":%d}",
-                                temp, hum, bat_volt, bat_soc, heading, (int)motor_state);
+                        "{\"temp\":%.2f,\"hum\":%.2f,\"batt_v\":%.2f,\"soc\":%.1f,\"heading\":%.1f,\"motor\":%d}",
+                        sensor_data.s_temp, sensor_data.s_hum, sensor_data.s_bat_volt, sensor_data.s_bat_soc, sensor_data.s_heading, (int)motor_state);
             udp_client_send(payload, len);
         }
 
@@ -214,10 +240,15 @@ void app_main(void)
     max17043_init(i2c_bus, &m_max17043);
     bh1750_init(i2c_bus, &m_bh1750);
     mpu6050_init(i2c_bus, &m_mpu6050);
+    driver_motor_init();
 
     i2c_mutex = xSemaphoreCreateMutex();
-
-    driver_motor_init();
+    sensor_queue = xQueueCreate(1, sizeof(sensor_data_t));
+    if(sensor_queue == NULL) 
+    {
+        ESP_LOGE(TAG, "Create sensor queue failed!");
+        return;
+    }
 
     ble_manager_set_wifi_connected_cb(on_wifi_connected);
     ble_manager_init("IMIC_Robot");
