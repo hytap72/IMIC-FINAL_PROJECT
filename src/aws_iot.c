@@ -3,6 +3,7 @@
 #include "net_config.h"
 #include "aws_certs.h"
 #include "driver_motor.h"
+#include "ota_manager.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -30,7 +31,33 @@ static void aws_iot_on_data(const char *topic, const char *data, int data_len)
         driver_motor_handle_cmd(cmd);
     }
 
+    /* Lệnh OTA: {"ota_url": "http://.../firmware.bin"} */
+    cJSON *ota_item = cJSON_GetObjectItem(root, "ota_url");
+    if (cJSON_IsString(ota_item) && ota_item->valuestring[0] != '\0') {
+        ESP_LOGI(TAG, "AWS IoT OTA command: %s", ota_item->valuestring);
+        ota_manager_start(ota_item->valuestring);
+    }
+
     cJSON_Delete(root);
+}
+
+/* Gửi ngay thông tin thiết bị (IP, phiên bản firmware...) mỗi khi MQTT
+ * (re)connect, để dashboard biết IP thiết bị mà không phải đợi vòng
+ * telemetry định kỳ đầu tiên */
+static void aws_iot_on_connected(void)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "thing", AWS_IOT_THING_NAME);
+    cJSON_AddStringToObject(root, "fw_version", ota_manager_get_version());
+    cJSON_AddBoolToObject(root, "ota_in_progress", ota_manager_is_in_progress());
+    cJSON_AddStringToObject(root, "device_ip", ota_manager_get_device_ip());
+
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!payload) return;
+
+    mqtt_manager_publish(AWS_IOT_TOPIC_DATA, payload, 0, 0, 0);
+    cJSON_free(payload);
 }
 
 esp_err_t aws_iot_start(void)
@@ -45,7 +72,12 @@ esp_err_t aws_iot_start(void)
         .client_cert  = AWS_DEVICE_CERT,
         .client_key   = AWS_PRIVATE_KEY,
         .on_data      = aws_iot_on_data,
+        .on_connected = aws_iot_on_connected,
     };
+
+    /* Cho ota_manager publish trạng thái OTA ngay trước khi nó tạm dừng
+     * MQTT để tải firmware -> dashboard thấy "Đang cập nhật..." */
+    ota_manager_set_status_cb(aws_iot_on_connected);
 
     esp_err_t ret = mqtt_manager_start(&cfg);
     if (ret != ESP_OK) return ret;
@@ -67,6 +99,9 @@ esp_err_t aws_iot_publish_telemetry(float temperature, float humidity,
     cJSON_AddNumberToObject(root, "battery_soc", battery_soc);
     cJSON_AddNumberToObject(root, "heading", heading);
     cJSON_AddNumberToObject(root, "motor_state", motor_state);
+    cJSON_AddStringToObject(root, "fw_version", ota_manager_get_version());
+    cJSON_AddBoolToObject(root, "ota_in_progress", ota_manager_is_in_progress());
+    cJSON_AddStringToObject(root, "device_ip", ota_manager_get_device_ip());
 
     char *payload = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

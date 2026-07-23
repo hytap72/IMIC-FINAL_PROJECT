@@ -1,6 +1,8 @@
 #include "ble_manager.h"
 #include "driver_motor.h"
+#include "ota_manager.h"
 
+#include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -199,6 +201,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi connected, IP: " IPSTR, IP2STR(&event->ip_info.ip));
         ble_manager_notify_wifi_status(WIFI_STATUS_CONNECTED);
+
+        char ip_str[16];
+        snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&event->ip_info.ip));
+        ota_manager_set_device_ip(ip_str);
 
         /* Một số router cấp DNS server không hoạt động được — ép dùng Google DNS */
         esp_netif_dns_info_t dns;
