@@ -246,7 +246,7 @@ void app_main(void)
     if(sensor_queue == NULL) 
     {
         ESP_LOGE(TAG, "Create sensor queue failed!");
-        return;
+        abort();
     }
 
     ble_manager_set_wifi_connected_cb(on_wifi_connected);

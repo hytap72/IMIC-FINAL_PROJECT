@@ -1,7 +1,11 @@
 #include "max17043.h"
 #include "i2c_bus.h"
+#include "esp_log.h"
+#include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+static const char *TAG = "MAX17043";
 
 esp_err_t max17043_init(i2c_master_bus_handle_t bus_handle, max17043_t *sensor){
     sensor->soc = 0.0f;
@@ -13,7 +17,15 @@ esp_err_t max17043_init(i2c_master_bus_handle_t bus_handle, max17043_t *sensor){
         .device_address = sensor->base.address,
         .scl_speed_hz = I2C_MASTER_FREQ,
     };
-    return i2c_master_bus_add_device(bus_handle, &dev_config, &sensor->base.dev_handle);
+    ESP_RETURN_ON_ERROR(
+        i2c_master_bus_add_device(bus_handle, &dev_config, &sensor->base.dev_handle),
+        TAG,
+        "Failed to initialize HTU21D"
+    );
+
+    ESP_LOGI(TAG, "HTU21D initialized successfully");
+
+    return ESP_OK;
 }
 
 
