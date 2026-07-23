@@ -55,18 +55,14 @@ typedef struct
     float s_gyro_y;
     float s_gyro_z;
 
-    float s_heading;
+    float s_heading;     /* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
+                         * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
+                         * theo thời gian do sai số tích lũy của gyroscope. */
 
 } sensor_data_t;
 
 static QueueHandle_t sensor_queue;
 
-
-/* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
- * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
- * theo thời gian do sai số tích lũy của gyroscope. */
-
-
 /* Theo dõi lỗi liên tiếp của từng cảm biến I2C. Khi một cảm biến bị NACK
  * (không có trên bus / mất kết nối) nhiều lần liên tiếp, tạm ngưng đọc
  * cảm biến đó một số chu kỳ để tránh dồn lỗi/timeout trên bus mỗi 2s,
@@ -104,47 +100,7 @@ static void sensor_mark_result(sensor_health_t *h, bool ok)
     }
 }
 
-/* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
- * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
- * theo thời gian do sai số tích lũy của gyroscope. */
-static volatile float s_heading  = 0.0f;
 
-/* Theo dõi lỗi liên tiếp của từng cảm biến I2C. Khi một cảm biến bị NACK
- * (không có trên bus / mất kết nối) nhiều lần liên tiếp, tạm ngưng đọc
- * cảm biến đó một số chu kỳ để tránh dồn lỗi/timeout trên bus mỗi 2s,
- * điều này có thể chiếm nhiều thời gian giữ i2c_mutex và làm các task
- * khác (WiFi/BLE) bị trễ -> rớt kết nối hoặc watchdog reset. */
-#define SENSOR_FAIL_THRESHOLD 3
-#define SENSOR_BACKOFF_CYCLES 10  /* ~20s ở chu kỳ 2s */
-
-typedef struct {
-    uint8_t fail_count;
-    uint8_t backoff;
-} sensor_health_t;
-
-static sensor_health_t hc_htu21d, hc_max17043, hc_bh1750;
-
-static bool sensor_should_skip(sensor_health_t *h)
-{
-    if (h->backoff > 0) {
-        h->backoff--;
-        return true;
-    }
-    return false;
-}
-
-static void sensor_mark_result(sensor_health_t *h, bool ok)
-{
-    if (ok) {
-        h->fail_count = 0;
-        h->backoff = 0;
-    } else if (h->fail_count < SENSOR_FAIL_THRESHOLD) {
-        h->fail_count++;
-        if (h->fail_count >= SENSOR_FAIL_THRESHOLD) {
-            h->backoff = SENSOR_BACKOFF_CYCLES;
-        }
-    }
-}
 
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
