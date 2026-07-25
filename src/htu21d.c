@@ -3,7 +3,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_check.h"
-
+static const char *TAG = "HTU21D";
 esp_err_t htu21d_init(i2c_master_bus_handle_t bus_handle, htu21d_t *sensor) {
 
     sensor->temp = 0.0f;
@@ -17,6 +17,16 @@ esp_err_t htu21d_init(i2c_master_bus_handle_t bus_handle, htu21d_t *sensor) {
         .scl_speed_hz = I2C_MASTER_FREQ,
     };
     return i2c_master_bus_add_device(bus_handle, &dev_cfg, &sensor->base.dev_handle);
+    
+    ESP_RETURN_ON_ERROR(
+        i2c_master_bus_add_device(bus_handle, &dev_cfg, &sensor->base.dev_handle),
+        TAG,
+        "Failed to initialize HTU21D"
+    );
+
+    ESP_LOGI(TAG, "HTU21D initialized successfully");
+
+    return ESP_OK;
 }
 
 static esp_err_t htu21d_get_raw_data(htu21d_t *sensor, uint8_t *cmd){

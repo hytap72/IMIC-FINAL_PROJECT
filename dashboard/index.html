@@ -737,18 +737,6 @@
             'translate(-50%, -100%) rotate(' + d.heading + 'deg)';
         }
 
-        if (typeof d.fw_version === "string") {
-          document.getElementById('txt-fwver').textContent = d.fw_version;
-        }
-        if (typeof d.ota_in_progress === "boolean") {
-          const pill = document.getElementById('ota-status-pill');
-          pill.textContent = d.ota_in_progress ? 'Đang cập nhật...' : 'Đang chờ';
-          pill.className = 'pill ' + (d.ota_in_progress ? 'warn' : '');
-        }
-        if (typeof d.device_ip === "string") {
-          document.getElementById('txt-device-ip').textContent = d.device_ip;
-        }
-
         if (temp !== null && hum !== null) {
           pushTelemetryPoint(temp, hum);
         }

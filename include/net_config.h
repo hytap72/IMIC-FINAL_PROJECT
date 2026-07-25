@@ -9,8 +9,8 @@
 /* ─── WiFi mặc định (thử kết nối ngay khi khởi động) ────────
  * Nếu không kết nối được, vẫn có thể cấu hình WiFi khác qua BLE.
  */
-#define DEFAULT_WIFI_SSID      "Chính"
-#define DEFAULT_WIFI_PASSWORD  "11111111"
+#define DEFAULT_WIFI_SSID      "Ngoc Lanh Tro"
+#define DEFAULT_WIFI_PASSWORD  "1010101010@a"
 
 /* ─── AWS IoT Core (MQTT qua mTLS) ──────────────────────────
  * Lấy AWS_IOT_ENDPOINT tại AWS IoT Console → Settings → Device data endpoint

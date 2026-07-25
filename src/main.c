@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -37,17 +38,71 @@ static mpu6050_t  m_mpu6050;
 static SemaphoreHandle_t i2c_mutex;
 
 /* Giá trị sensor mới nhất, cập nhật định kỳ bởi sensor_task */
-static volatile float s_temp     = -999.0f;
-static volatile float s_hum      = -999.0f;
-static volatile float s_bat_volt = -999.0f;
-static volatile float s_bat_soc  = -999.0f;
-static volatile float s_lux      = -999.0f;
-static volatile float s_accel_x  = 0.0f;
-static volatile float s_accel_y  = 0.0f;
-static volatile float s_accel_z  = 0.0f;
-static volatile float s_gyro_x   = 0.0f;
-static volatile float s_gyro_y   = 0.0f;
-static volatile float s_gyro_z   = 0.0f;
+
+typedef struct
+{
+    float s_temp;
+    float s_hum;
+    float s_bat_volt;
+    float s_bat_soc;
+    float s_lux;
+
+    float s_accel_x;
+    float s_accel_y;
+    float s_accel_z;
+
+    float s_gyro_x;
+    float s_gyro_y;
+    float s_gyro_z;
+
+    float s_heading;
+
+} sensor_data_t;
+
+static QueueHandle_t sensor_queue;
+
+
+/* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
+ * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
+ * theo thời gian do sai số tích lũy của gyroscope. */
+
+
+/* Theo dõi lỗi liên tiếp của từng cảm biến I2C. Khi một cảm biến bị NACK
+ * (không có trên bus / mất kết nối) nhiều lần liên tiếp, tạm ngưng đọc
+ * cảm biến đó một số chu kỳ để tránh dồn lỗi/timeout trên bus mỗi 2s,
+ * điều này có thể chiếm nhiều thời gian giữ i2c_mutex và làm các task
+ * khác (WiFi/BLE) bị trễ -> rớt kết nối hoặc watchdog reset. */
+#define SENSOR_FAIL_THRESHOLD 3
+#define SENSOR_BACKOFF_CYCLES 10  /* ~20s ở chu kỳ 2s */
+
+typedef struct {
+    uint8_t fail_count;
+    uint8_t backoff;
+} sensor_health_t;
+
+static sensor_health_t hc_htu21d, hc_max17043, hc_bh1750;
+
+static bool sensor_should_skip(sensor_health_t *h)
+{
+    if (h->backoff > 0) {
+        h->backoff--;
+        return true;
+    }
+    return false;
+}
+
+static void sensor_mark_result(sensor_health_t *h, bool ok)
+{
+    if (ok) {
+        h->fail_count = 0;
+        h->backoff = 0;
+    } else if (h->fail_count < SENSOR_FAIL_THRESHOLD) {
+        h->fail_count++;
+        if (h->fail_count >= SENSOR_FAIL_THRESHOLD) {
+            h->backoff = SENSOR_BACKOFF_CYCLES;
+        }
+    }
+}
 
 /* Hướng la bàn (độ, 0-360), tích phân gyro_z theo thời gian.
  * Đây là góc yaw tương đối (không phải hướng từ trường thật) và sẽ trôi dần
@@ -94,6 +149,23 @@ static void sensor_mark_result(sensor_health_t *h, bool ok)
 /* Đọc các cảm biến I2C (HTU21D, MAX17043, BH1750) định kỳ */
 static void sensor_task(void *pvParameters)
 {
+    sensor_data_t sensor_data = {
+        .s_temp      = -999.0f,
+        .s_hum       = -999.0f,
+        .s_bat_volt  = -999.0f,
+        .s_bat_soc   = -999.0f,
+        .s_lux       = -999.0f,
+
+        .s_accel_x   = 0.0f,
+        .s_accel_y   = 0.0f,
+        .s_accel_z   = 0.0f,
+
+        .s_gyro_x    = 0.0f,
+        .s_gyro_y    = 0.0f,
+        .s_gyro_z    = 0.0f,
+
+        .s_heading   = 0.0f
+    };
     while (1) {
         if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             if (!sensor_should_skip(&hc_htu21d)) {
@@ -134,6 +206,7 @@ static void sensor_task(void *pvParameters)
             }
 
             xSemaphoreGive(i2c_mutex);
+            xQueueOverwrite(sensor_queue, &sensor_data);
         }
 
         ESP_LOGI(TAG, "Temp: %.2f C, Hum: %.2f %%, Batt: %.2f V (%.1f %%), Lux: %.2f",
@@ -149,6 +222,8 @@ static void sensor_task(void *pvParameters)
  * lên AWS IoT (MQTT) và UDP server */
 static void telemetry_task(void *pvParameters)
 {
+    sensor_data_t sensor_data;
+    motor_cmd_t motor_state;
     while (1) {
         float temp     = s_temp;
         float hum      = s_hum;
@@ -160,6 +235,7 @@ static void telemetry_task(void *pvParameters)
         if (aws_iot_is_connected()) {
             aws_iot_publish_telemetry(temp, hum, bat_volt, bat_soc, heading, (uint8_t)motor_state);
         }
+
 
         if (udp_client_is_ready()) {
             char payload[112];
@@ -220,10 +296,15 @@ void app_main(void)
     max17043_init(i2c_bus, &m_max17043);
     bh1750_init(i2c_bus, &m_bh1750);
     mpu6050_init(i2c_bus, &m_mpu6050);
+    driver_motor_init();
 
     i2c_mutex = xSemaphoreCreateMutex();
-
-    driver_motor_init();
+    sensor_queue = xQueueCreate(1, sizeof(sensor_data_t));
+    if(sensor_queue == NULL) 
+    {
+        ESP_LOGE(TAG, "Create sensor queue failed!");
+        abort();
+    }
 
     ble_manager_set_wifi_connected_cb(on_wifi_connected);
     ble_manager_init("IMIC_Robot");
