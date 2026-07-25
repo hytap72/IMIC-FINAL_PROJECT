@@ -9,6 +9,9 @@
  * topic/data đã được null-terminate, chỉ hợp lệ trong phạm vi callback. */
 typedef void (*mqtt_data_cb_t)(const char *topic, const char *data, int data_len);
 
+/* Callback gọi mỗi khi MQTT client (re)connect tới broker thành công */
+typedef void (*mqtt_connected_cb_t)(void);
+
 typedef struct {
     const char *uri;          /* "mqtts://host:port" hoặc "mqtt://host:port" */
     const char *client_id;    /* MQTT client id, NULL để auto-generate */
@@ -16,6 +19,7 @@ typedef struct {
     const char *client_cert;  /* PEM device cert, NULL nếu không dùng mTLS */
     const char *client_key;   /* PEM private key, NULL nếu không dùng mTLS */
     mqtt_data_cb_t on_data;   /* gọi khi có message trên topic đã subscribe */
+    mqtt_connected_cb_t on_connected; /* gọi khi (re)connect thành công, NULL nếu không cần */
 } mqtt_manager_config_t;
 
 /* Khởi tạo và kết nối MQTT client (chạy nền, tự reconnect) */
@@ -28,5 +32,13 @@ int mqtt_manager_publish(const char *topic, const char *data, int len, int qos, 
 esp_err_t mqtt_manager_subscribe(const char *topic, int qos);
 
 bool mqtt_manager_is_connected(void);
+
+/* Dừng MQTT client (giải phóng buffer/TLS context) để tạm rảnh bộ nhớ
+ * cho một kết nối TLS khác (ví dụ HTTPS OTA) */
+esp_err_t mqtt_manager_stop(void);
+
+/* Khởi động lại MQTT client sau khi đã mqtt_manager_stop(), dùng config
+ * đã truyền cho mqtt_manager_start() trước đó */
+esp_err_t mqtt_manager_reconnect(void);
 
 #endif
